@@ -5,6 +5,8 @@
       '--lrc-tran-size': settingStore.lyricTranFontSize + 'px',
       '--lrc-roma-size': settingStore.lyricRomaFontSize + 'px',
       '--lrc-bold': settingStore.lyricFontBold ? 'bold' : 'normal',
+      '--ja-font-family':
+        settingStore.japaneseLyricFont !== 'follow' ? settingStore.japaneseLyricFont : '',
       'font-family': settingStore.LyricFont !== 'follow' ? settingStore.LyricFont : '',
       cursor: statusStore.playerMetaShow ? 'auto' : 'none',
     }"
@@ -41,7 +43,19 @@
               v-for="(item, index) in musicStore.songLyric.yrcData"
               :key="index"
               :id="`lrc-${index}`"
-              :class="['lrc-line', 'is-yrc', { on: statusStore.lyricIndex === index }]"
+              :class="[
+                'lrc-line',
+                'is-yrc',
+                {
+                  // on: statusStore.lyricIndex === index,
+                  // 当播放时间大于等于当前歌词的开始时间
+                  on:
+                    (playSeek >= item.time && playSeek < item.endTime) ||
+                    statusStore.lyricIndex === index,
+                  'is-bg': item.isBG,
+                  'is-duet': item.isDuet,
+                },
+              ]"
               :style="{
                 filter: settingStore.lyricsBlur
                   ? `blur(${Math.min(Math.abs(statusStore.lyricIndex - index) * 1.8, 10)}px)`
@@ -60,16 +74,26 @@
                     'end-with-space': text.endsWithSpace,
                   }"
                 >
-                  <span class="word" :lang="/[\u4e00-\u9fa5]/.test(text.content) ? 'zh-CN' : 'en'">{{ text.content }}</span>
-                  <span class="filler" :style="getYrcStyle(text, index)" :lang="/[\u4e00-\u9fa5]/.test(text.content) ? 'zh-CN' : 'en'">
+                  <span class="word" :lang="getLyricLanguage(text.content)">
+                    {{ text.content }}
+                  </span>
+                  <span
+                    class="filler"
+                    :style="getYrcStyle(text, index)"
+                    :lang="getLyricLanguage(text.content)"
+                  >
                     {{ text.content }}
                   </span>
                 </div>
               </div>
               <!-- 翻译 -->
-              <span v-if="item.tran && settingStore.showTran" class="tran" lang="en">{{ item.tran }}</span>
+              <span v-if="item.tran && settingStore.showTran" class="tran" lang="en">
+                {{ item.tran }}
+              </span>
               <!-- 音译 -->
-              <span v-if="item.roma && settingStore.showRoma" class="roma" lang="en">{{ item.roma }}</span>
+              <span v-if="item.roma && settingStore.showRoma" class="roma" lang="en">
+                {{ item.roma }}
+              </span>
               <!-- 倒计时 -->
               <div
                 v-if="
@@ -113,11 +137,15 @@
               @click="jumpSeek(item.time)"
             >
               <!-- 歌词 -->
-              <span class="content" :lang="/[\u4e00-\u9fa5]/.test(item.content) ? 'zh-CN' : 'en'">{{ item.content }}</span>
+              <span class="content" :lang="getLyricLanguage(item.content)">{{ item.content }}</span>
               <!-- 翻译 -->
-              <span v-if="item.tran && settingStore.showTran" class="tran" lang="en">{{ item.tran }}</span>
+              <span v-if="item.tran && settingStore.showTran" class="tran" lang="en">
+                {{ item.tran }}
+              </span>
               <!-- 音译 -->
-              <span v-if="item.roma && settingStore.showRoma" class="roma" lang="en">{{ item.roma }}</span>
+              <span v-if="item.roma && settingStore.showRoma" class="roma" lang="en">
+                {{ item.roma }}
+              </span>
             </div>
             <div class="placeholder" />
           </template>
@@ -151,6 +179,7 @@ import { NScrollbar } from "naive-ui";
 import { useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import { openSetting } from "@/utils/modal";
 import player from "@/utils/player";
+import { getLyricLanguage } from "@/utils/lyric";
 
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();
@@ -200,12 +229,12 @@ const lyricsScroll = (index: number) => {
 const getYrcStyle = (wordData: LyricContentType, lyricIndex: number) => {
   if (settingStore.showYrcAnimation) {
     // 如果当前歌词索引与播放歌曲的歌词索引不匹配
-    if (statusStore.lyricIndex !== lyricIndex) {
-      return {
-        transitionDuration: `0ms, 0ms, 0.35s`,
-        transitionDelay: `0ms`,
-      };
-    }
+    // if (statusStore.lyricIndex !== lyricIndex) {
+    //   return {
+    //     transitionDuration: `0ms, 0ms, 0.35s`,
+    //     transitionDelay: `0ms`,
+    //   };
+    // }
     // 如果播放状态不是加载中，且当前单词的时间加上持续时间减去播放进度大于 0
     if (
       statusStore.playLoading === false &&
@@ -389,6 +418,9 @@ onBeforeUnmount(() => {
           }
         }
       }
+      &:lang(ja) {
+        font-family: var(--ja-font-family);
+      }
     }
     .tran {
       margin-top: 8px;
@@ -436,9 +468,23 @@ onBeforeUnmount(() => {
       .roma {
         opacity: 0.3;
       }
+      &.is-bg {
+        opacity: 0.4;
+        transform: scale(0.5);
+        padding: 0px 32px;
+      }
+      &.is-duet {
+        transform-origin: right;
+        .content,
+        .tran,
+        .roma {
+          text-align: right;
+          justify-content: flex-end;
+        }
+      }
     }
     &.on {
-      opacity: 1;
+      opacity: 1 !important;
       transform: scale(1);
       .content-text {
         .filler {
@@ -451,6 +497,9 @@ onBeforeUnmount(() => {
       .tran,
       .roma {
         opacity: 0.6;
+      }
+      &.is-bg {
+        opacity: 0.6 !important;
       }
     }
     &::before {

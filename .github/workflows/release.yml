@@ -1,175 +1,132 @@
-# Release 发行版本部署
-## 多端部署
-name: Build Release
+name: Build & Release SPlayer
 
 on:
   push:
     tags:
-      - v*
+      - v* # 只在 tag v* 时触发
   workflow_dispatch:
 
+env:
+  NODE_VERSION: 22.x
+  PNPM_VERSION: 8
+
 jobs:
-  # Windows
-  build-windows:
-    name: Build for Windows
-    runs-on: windows-latest
+  # ===================================================================
+  #  并行构建所有平台和架构
+  # ===================================================================
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # 矩阵策略
+      # 即使一个矩阵任务失败，其他任务也会继续运行
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    # 开始步骤
     steps:
       # 检出 Git 仓库
       - name: Check out git repository
         uses: actions/checkout@v4
-      # 安装 Node.js
-      - name: Install Node.js
-        uses: actions/setup-node@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
         with:
-          node-version: "22.x"
-      # 安装 pnpm
-      - name: Install pnpm
-        run: npm install -g pnpm
-      # 复制环境变量文件
-      - name: Copy .env.example
-        run: |
-          if (-not (Test-Path .env)) {
-            Copy-Item .env.example .env
-          } else {
-            Write-Host ".env file already exists. Skipping the copy step."
-          }
+          version: ${{ env.PNPM_VERSION }}
+      # 安装 Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
       # 安装项目依赖
-      - name: Install Dependencies
+      - name: Install dependencies
         run: pnpm install
-      # 构建 Electron App
-      - name: Build Electron App for Windows
-        run: pnpm run build:win || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-      # 上传构建产物
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SPlarer-Win
-          if-no-files-found: ignore
-          path: dist/*.*
-      # 创建 GitHub Release
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          files: dist/*.*
-        env:
-          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-  # Mac
-  build-macos:
-    name: Build for macOS
-    runs-on: macos-latest
-    steps:
-      # 检出 Git 仓库
-      - name: Check out git repository
-        uses: actions/checkout@v4
-      # 安装 Node.js
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20.x"
-      # 安装 pnpm
-      - name: Install pnpm
-        run: npm install -g pnpm
       # 复制环境变量文件
-      - name: Copy .env.example
-        run: |
-          if [ ! -f .env ]; then
-            cp .env.example .env
-          else
-            echo ".env file already exists. Skipping the copy step."
-          fi
-      # 安装项目依赖
-      - name: Install Dependencies
-        run: pnpm install
-      # 构建 Electron App
-      - name: Build Electron App for macOS
-        run: pnpm run build:mac || true
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-      # 上传构建产物
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SPlarer-Macos
-          if-no-files-found: ignore
-          path: dist/*.*
-      # 创建 GitHub Release
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          files: dist/*.*
-        env:
-          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-  # Linux
-  build-linux:
-    name: Build for Linux
-    runs-on: ubuntu-22.04
-    steps:
-      # 检出 Git 仓库
-      - name: Check out git repository
-        uses: actions/checkout@v4
-      # 安装 Node.js
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20.x"
-      # 安装 pnpm
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - name: Copy .env file on Windows
+        if: runner.os == 'Windows'
+        run: Copy-Item .env.example .env -ErrorAction SilentlyContinue
+      - name: Copy .env file on macOS & Linux
+        if: runner.os == 'macOS' || runner.os == 'Linux'
+        run: cp -n .env.example .env
+      # 清理旧的构建产物
+      - name: Clean dist folder on Windows
+        if: runner.os == 'Windows'
+        run: if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+      - name: Clean dist folder on macOS & Linux
+        if: runner.os == 'macOS' || runner.os == 'Linux'
+        run: rm -rf dist
       # 更新 Ubuntu 软件源
       - name: Ubuntu Update with sudo
+        if: runner.os == 'Linux'
         run: sudo apt-get update
       # 安装依赖
       - name: Install RPM & Pacman
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get install --no-install-recommends -y rpm &&
           sudo apt-get install --no-install-recommends -y libarchive-tools &&
           sudo apt-get install --no-install-recommends -y libopenjp2-tools
-      # 安装 Snapcraft
+      # 安裝 Snapcraft
       - name: Install Snapcraft
+        if: runner.os == 'Linux'
         uses: samuelmeuli/action-snapcraft@v2
         with:
-          snapcraft_token: ${{ secrets.SNAPCRAFT_TOKEN }}
-      # 复制环境变量文件
-      - name: Copy .env.example
-        run: |
-          if [ ! -f .env ]; then
-            cp .env.example .env
-          else
-            echo ".env file already exists. Skipping the copy step."
-          fi
-      # 安装项目依赖
-      - name: Install Dependencies
-        run: pnpm install
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
       # 构建 Electron App
-      - name: Build Electron App for Linux
-        run: pnpm run build:linux || true
-        shell: bash
+      - name: Build macOS Universal App
+        if: runner.os == 'macOS'
+        run: pnpm run build:mac -- --universal || true
         env:
-          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Windows x64 & ARM64 App
+        if: runner.os == 'Windows'
+        run: pnpm run build:win -- --x64 --arm64 || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Linux x64 & ARM64 App
+        if: runner.os == 'Linux'
+        run: pnpm run build:linux -- --x64 --arm64 || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
       # 上传 Snap 包到 Snapcraft 商店
       - name: Publish Snap to Snap Store
+        if: runner.os == 'Linux'
         run: snapcraft upload dist/*.snap --release stable
         continue-on-error: true
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
-      # 上传构建产物
-      - name: Upload Linux artifact
+      # 合并所有构建
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SPlarer-Linux
-          if-no-files-found: ignore
-          path: dist/*.*
-      # 创建 GitHub Release
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/v')
+          name: SPlayer-${{ runner.os }}
+          path: dist/
+
+  # ===================================================================
+  # 收集并发布 Release
+  # ===================================================================
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    # 需要写入权限
+    permissions:
+      contents: write
+    steps:
+      # 将所有产物下载到 artifacts 文件夹
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          files: dist/*.*
-        env:
-          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          path: artifacts
+      # 创建 GitHub Release 并上传所有产物
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # 自动生成 Release 说明
+          generate_release_notes: true
+          # 发布为草稿
+          draft: false
+          # 发布为预发布
+          prerelease: false
