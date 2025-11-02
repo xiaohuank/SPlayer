@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { SongUrlResult } from "./unblock";
+import { serverLog } from "../../main/logger";
 import getKuwoSongUrl from "./kuwo";
-import log from "../../main/logger";
 import axios from "axios";
 
 /**
@@ -17,16 +17,16 @@ const getNeteaseSongUrl = async (id: number | string): Promise<SongUrlResult> =>
       params: { types: "url", id },
     });
     const songUrl = result.data.url;
-    log.info("🔗 NeteaseSongUrl URL:", songUrl);
+    serverLog.log("🔗 NeteaseSongUrl URL:", songUrl);
     return { code: 200, url: songUrl };
   } catch (error) {
-    log.error("❌ Get NeteaseSongUrl Error:", error);
+    serverLog.error("❌ Get NeteaseSongUrl Error:", error);
     return { code: 404, url: null };
   }
 };
 
 // 初始化 UnblockAPI
-const UnblockAPI = async (fastify: FastifyInstance) => {
+export const initUnblockAPI = async (fastify: FastifyInstance) => {
   // 主信息
   fastify.get("/unblock", (_, reply) => {
     reply.send({
@@ -62,7 +62,5 @@ const UnblockAPI = async (fastify: FastifyInstance) => {
     },
   );
 
-  log.info("🌐 Register UnblockAPI successfully");
+  serverLog.info("🌐 Register UnblockAPI successfully");
 };
-
-export default UnblockAPI;

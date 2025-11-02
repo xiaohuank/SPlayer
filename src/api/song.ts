@@ -1,3 +1,4 @@
+import { isElectron } from "@/utils/helper";
 import { songLevelData } from "@/utils/meta";
 import request from "@/utils/request";
 
@@ -65,22 +66,28 @@ export const songLyric = (id: number) => {
   });
 };
 
-// 获取格式TTML的歌词
+/**
+ * 获取歌曲 TTML 歌词
+ * @param id 音乐 id
+ * @returns TTML 格式歌词
+ */
 export const songLyricTTML = async (id: number) => {
-const url = `https://amll-ttml-db.stevexmh.net/ncm/${id}`;
-  try {
-    const response = await fetch(url);
-    if (response === null || response.status !== 200) {
-      console.error(`TTML API请求失败或TTML仓库没有歌词, 将会使用默认歌词`);
+  if (isElectron) {
+    return request({ url: "/lyric/ttml", params: { id } });
+  } else {
+    const url = `https://amll-ttml-db.stevexmh.net/ncm/${id}`;
+    try {
+      const response = await fetch(url);
+      if (response === null || response.status !== 200) {
+        return null;
+      }
+      const data = await response.text();
+      return data;
+    } catch {
       return null;
     }
-    const data = await response.text();
-    return data;
-  } catch (error) {
-    console.error('TTML API请求出错:', error);
-    return null;
   }
-}
+};
 
 /**
  * 获取歌曲下载链接

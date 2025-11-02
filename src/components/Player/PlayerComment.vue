@@ -1,38 +1,40 @@
 <!-- 播放器 - 评论 -->
 <template>
-  <div class="player-comment">
-    <n-scrollbar ref="lyricScroll" class="lyric-scroll">
-      <template v-if="commentHotData">
+  <Transition name="fade" mode="out-in">
+    <div :key="songId" class="player-comment">
+      <n-scrollbar ref="lyricScroll" class="lyric-scroll">
+        <template v-if="commentHotData">
+          <div class="placeholder">
+            <div class="title">
+              <SvgIcon name="Fire" />
+              <span>热门评论</span>
+            </div>
+          </div>
+          <CommentList
+            :data="commentHotData"
+            :loading="commentHotData?.length === 0"
+            :type="songType"
+            transparent
+          />
+        </template>
         <div class="placeholder">
           <div class="title">
-            <SvgIcon name="Fire" />
-            <span>热门评论</span>
+            <SvgIcon name="Message" />
+            <span>全部评论</span>
           </div>
         </div>
         <CommentList
-          :data="commentHotData"
-          :loading="commentHotData?.length === 0"
+          :data="commentData"
+          :loading="commentLoading"
           :type="songType"
+          :loadMore="commentHasMore"
           transparent
+          @loadMore="loadMoreComment"
         />
-      </template>
-      <div class="placeholder">
-        <div class="title">
-          <SvgIcon name="Message" />
-          <span>全部评论</span>
-        </div>
-      </div>
-      <CommentList
-        :data="commentData"
-        :loading="commentLoading"
-        :type="songType"
-        :loadMore="commentHasMore"
-        transparent
-        @loadMore="loadMoreComment"
-      />
-      <div class="placeholder" />
-    </n-scrollbar>
-  </div>
+        <div class="placeholder" />
+      </n-scrollbar>
+    </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
@@ -99,6 +101,15 @@ const loadMoreComment = () => {
   getAllComment();
 };
 
+// 歌曲id变化
+watch(
+  () => songId.value,
+  () => {
+    getHotCommentData();
+    getAllComment();
+  },
+);
+
 onMounted(() => {
   getHotCommentData();
   getAllComment();
@@ -107,9 +118,11 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .player-comment {
+  position: absolute;
+  right: 0;
+  width: 60%;
   flex: 1;
   height: 100%;
-  width: 100%;
   overflow: hidden;
   filter: drop-shadow(0px 4px 6px rgba(0, 0, 0, 0.2));
   mask: linear-gradient(

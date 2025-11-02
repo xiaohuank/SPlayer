@@ -1,12 +1,13 @@
 import { join } from "path";
-import { isDev } from "../main/utils";
-import initNcmAPI from "./netease";
-import initUnblockAPI from "./unblock";
+import { isDev } from "../main/utils/config";
+import { serverLog } from "../main/logger";
+import { initNcmAPI } from "./netease";
+import { initUnblockAPI } from "./unblock";
+import { initControlAPI } from "./control";
 import fastifyCookie from "@fastify/cookie";
 import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import fastify from "fastify";
-import log from "../main/logger";
 
 const initAppServer = async () => {
   try {
@@ -21,7 +22,7 @@ const initAppServer = async () => {
     server.register(fastifyMultipart);
     // 生产环境启用静态文件
     if (!isDev) {
-      log.info("📂 Serving static files from /renderer");
+      serverLog.info("📂 Serving static files from /renderer");
       server.register(fastifyStatic, {
         root: join(__dirname, "../renderer"),
       });
@@ -47,13 +48,14 @@ const initAppServer = async () => {
     // 注册接口
     server.register(initNcmAPI, { prefix: "/api" });
     server.register(initUnblockAPI, { prefix: "/api" });
+    server.register(initControlAPI, { prefix: "/api" });
     // 启动端口
     const port = Number(process.env["VITE_SERVER_PORT"] || 25884);
     await server.listen({ port });
-    log.info(`🌐 Starting AppServer on port ${port}`);
+    serverLog.info(`🌐 Starting AppServer on port ${port}`);
     return server;
   } catch (error) {
-    log.error("🚫 AppServer failed to start");
+    serverLog.error("🚫 AppServer failed to start");
     throw error;
   }
 };

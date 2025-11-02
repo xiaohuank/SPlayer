@@ -1,4 +1,4 @@
-name: Build & Release SPlayer
+name: Build & Release
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
 env:
   NODE_VERSION: 22.x
   PNPM_VERSION: 8
+  SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
 
 jobs:
   # ===================================================================
@@ -28,6 +29,7 @@ jobs:
       # 检出 Git 仓库
       - name: Check out git repository
         uses: actions/checkout@v4
+      # 设置 pnpm 版本
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
@@ -38,23 +40,46 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
+      # 清理旧的构建产物
+      - name: Clean workspace on Windows
+        if: runner.os == 'Windows'
+        run: |
+          Write-Host "🧹 Cleaning workspace, node_modules, and Electron caches..."
+          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+          if (Test-Path out) { Remove-Item -Recurse -Force out }
+          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
+
+          if (Test-Path "$env:LOCALAPPDATA\electron-builder") {
+            Remove-Item "$env:LOCALAPPDATA\electron-builder" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          if (Test-Path "$env:LOCALAPPDATA\electron") {
+            Remove-Item "$env:LOCALAPPDATA\electron" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+      - name: Clean workspace on macOS & Linux
+        if: runner.os == 'macOS' || runner.os == 'Linux'
+        run: |
+          echo "🧹 Cleaning workspace, node_modules, and Electron caches..."
+          rm -rf dist out node_modules ~/.cache/electron-builder ~/.cache/electron
       # 安装项目依赖
       - name: Install dependencies
         run: pnpm install
       # 复制环境变量文件
       - name: Copy .env file on Windows
         if: runner.os == 'Windows'
-        run: Copy-Item .env.example .env -ErrorAction SilentlyContinue
+        run: |
+          if (-not (Test-Path .env)) {
+            Copy-Item .env.example .env
+          } else {
+            Write-Host ".env file already exists. Skipping the copy step."
+          }
       - name: Copy .env file on macOS & Linux
         if: runner.os == 'macOS' || runner.os == 'Linux'
-        run: cp -n .env.example .env
-      # 清理旧的构建产物
-      - name: Clean dist folder on Windows
-        if: runner.os == 'Windows'
-        run: if (Test-Path dist) { Remove-Item -Recurse -Force dist }
-      - name: Clean dist folder on macOS & Linux
-        if: runner.os == 'macOS' || runner.os == 'Linux'
-        run: rm -rf dist
+        run: |
+          if [ ! -f .env ]; then
+            cp .env.example .env
+          else
+            echo ".env file already exists. Skipping the copy step."
+          fi
       # 更新 Ubuntu 软件源
       - name: Ubuntu Update with sudo
         if: runner.os == 'Linux'
@@ -70,38 +95,35 @@ jobs:
       - name: Install Snapcraft
         if: runner.os == 'Linux'
         uses: samuelmeuli/action-snapcraft@v2
-        with:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
       # 构建 Electron App
-      - name: Build macOS Universal App
-        if: runner.os == 'macOS'
-        run: pnpm run build:mac -- --universal || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build Windows x64 & ARM64 App
         if: runner.os == 'Windows'
-        run: pnpm run build:win -- --x64 --arm64 || true
+        run: pnpm build:win || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build macOS Universal App
+        if: runner.os == 'macOS'
+        run: pnpm build:mac || true
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build Linux x64 & ARM64 App
         if: runner.os == 'Linux'
-        run: pnpm run build:linux -- --x64 --arm64 || true
+        run: pnpm build:linux || true
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
       # 上传 Snap 包到 Snapcraft 商店
       - name: Publish Snap to Snap Store
         if: runner.os == 'Linux'
         run: snapcraft upload dist/*.snap --release stable
         continue-on-error: true
-        env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
       # 合并所有构建
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SPlayer-${{ runner.os }}
-          path: dist/
+          path: dist/*.*
 
   # ===================================================================
   # 收集并发布 Release
@@ -122,6 +144,7 @@ jobs:
       # 创建 GitHub Release 并上传所有产物
       - name: Create GitHub Release and Upload Assets
         uses: softprops/action-gh-release@v2
+        continue-on-error: true
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           # 自动生成 Release 说明
@@ -130,3 +153,17 @@ jobs:
           draft: false
           # 发布为预发布
           prerelease: false
+          # 全部上传
+          files: |
+            !artifacts/**/*-unpacked/**
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.pacman
+            artifacts/**/*.snap
+            artifacts/**/*.tar.gz
+            artifacts/**/*.yml
+            artifacts/**/*.blockmap
