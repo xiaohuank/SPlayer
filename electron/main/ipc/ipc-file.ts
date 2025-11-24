@@ -1,17 +1,27 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
-import { basename, join, resolve } from "path";
+import { basename, isAbsolute, join, relative, resolve } from "path";
 import { access, readFile, stat, unlink, writeFile } from "fs/promises";
 import { parseFile } from "music-metadata";
 import { getFileID, getFileMD5, metaDataLyricsArrayToLrc } from "../utils/helper";
 import { File, Picture, Id3v2Settings } from "node-taglib-sharp";
 import { ipcLog } from "../logger";
-import FastGlob from "fast-glob";
 import { download } from "electron-dl";
+import { Options as GlobOptions } from "fast-glob/out/settings";
+import FastGlob from "fast-glob";
 
 /**
  * 文件相关 IPC
  */
 const initFileIpc = (): void => {
+  /**
+   * 获取全局搜索配置
+   * @param cwd 当前工作目录
+   */
+  const globOpt = (cwd?: string): GlobOptions => ({
+    cwd,
+    caseSensitiveMatch: false,
+  });
+
   // 默认文件夹
   ipcMain.handle(
     "get-default-dir",
@@ -27,7 +37,7 @@ const initFileIpc = (): void => {
       const filePath = resolve(dirPath).replace(/\\/g, "/");
       console.info(`📂 Fetching music files from: ${filePath}`);
       // 查找指定目录下的所有音乐文件
-      const musicFiles = await FastGlob("**/*.{mp3,wav,flac,aac,webm}", { cwd: filePath });
+      const musicFiles = await FastGlob("**/*.{mp3,wav,flac,aac,webm}", globOpt(filePath));
       // 解析元信息
       const metadataPromises = musicFiles.map(async (file) => {
         const filePath = join(dirPath, file);
@@ -35,15 +45,6 @@ const initFileIpc = (): void => {
         const { common, format } = await parseFile(filePath);
         // 获取文件大小
         const { size } = await stat(filePath);
-        // 判断音质等级
-        let quality: string;
-        if ((format.sampleRate || 0) >= 96000 || (format.bitsPerSample || 0) > 16) {
-          quality = "Hi-Res";
-        } else if ((format.sampleRate || 0) >= 44100) {
-          quality = "HQ";
-        } else {
-          quality = "SQ";
-        }
         return {
           id: getFileID(filePath),
           name: common.title || basename(filePath),
@@ -53,7 +54,7 @@ const initFileIpc = (): void => {
           duration: (format?.duration ?? 0) * 1000,
           size: (size / (1024 * 1024)).toFixed(2),
           path: filePath,
-          quality,
+          quality: format.bitrate ?? 0,
         };
       });
       const metadataArray = await Promise.all(metadataPromises);
@@ -136,23 +137,25 @@ const initFileIpc = (): void => {
     }> => {
       try {
         const filePath = resolve(path).replace(/\\/g, "/");
-        const { common } = await parseFile(filePath);
 
         // 尝试获取同名的歌词文件
         const filePathWithoutExt = filePath.replace(/\.[^.]+$/, "");
         for (const ext of ["ttml", "lrc"] as const) {
           const lyricPath = `${filePathWithoutExt}.${ext}`;
-          ipcLog.info("lyricPath", lyricPath);
-          try {
-            await access(lyricPath);
-            const lyric = await readFile(lyricPath, "utf-8");
-            if (lyric && lyric != "") return { lyric, format: ext };
-          } catch {
-            /* empty */
+          const matches = await FastGlob(lyricPath, globOpt());
+          ipcLog.info("lyric matches", matches);
+          if (matches.length > 0) {
+            try {
+              const lyric = await readFile(matches[0], "utf-8");
+              if (lyric && lyric !== "") return { lyric, format: ext };
+            } catch {
+              /* empty */
+            }
           }
         }
 
         // 尝试获取元数据
+        const { common } = await parseFile(filePath);
         const lyric = common?.lyrics?.[0]?.syncText;
         if (lyric && lyric.length > 0) {
           return { lyric: metaDataLyricsArrayToLrc(lyric), format: "lrc" };
@@ -199,16 +202,52 @@ const initFileIpc = (): void => {
   // 读取本地歌词
   ipcMain.handle(
     "read-local-lyric",
-    async (_, lyricDir: string, id: number, ext: string): Promise<string> => {
-      const lyricPath = join(lyricDir, `${id}.${ext}`);
+    async (_, lyricDirs: string[], id: number): Promise<{ lrc: string; ttml: string }> => {
+      const result = { lrc: "", ttml: "" };
+
       try {
-        await access(lyricPath);
-        const lyric = await readFile(lyricPath, "utf-8");
-        if (lyric) return lyric;
+        // 定义需要查找的模式
+        // 此处的 `{,*.}` 表示这里可以取 `` (empty) 也可以取 `*.`
+        // 将歌词文件命名为 `歌曲ID.后缀名` 或者 `任意前缀.歌曲ID.后缀名` 均可
+        const patterns = {
+          ttml: `**/{,*.}${id}.ttml`,
+          lrc: `**/{,*.}${id}.lrc`,
+        };
+
+        // 遍历每一个目录
+        for (const dir of lyricDirs) {
+          try {
+            // 查找 ttml
+            if (!result.ttml) {
+              const ttmlFiles = await FastGlob(patterns.ttml, globOpt(dir));
+              if (ttmlFiles.length > 0) {
+                const filePath = join(dir, ttmlFiles[0]);
+                await access(filePath);
+                result.ttml = await readFile(filePath, "utf-8");
+              }
+            }
+
+            // 查找 lrc
+            if (!result.lrc) {
+              const lrcFiles = await FastGlob(patterns.lrc, globOpt(dir));
+              if (lrcFiles.length > 0) {
+                const filePath = join(dir, lrcFiles[0]);
+                await access(filePath);
+                result.lrc = await readFile(filePath, "utf-8");
+              }
+            }
+
+            // 如果两种文件都找到了就提前结束搜索
+            if (result.ttml && result.lrc) break;
+          } catch {
+            // 某个路径异常，跳过
+          }
+        }
       } catch {
-        /* empty */
+        /* 忽略错误 */
       }
-      return "";
+
+      return result;
     },
   );
 
@@ -371,6 +410,16 @@ const initFileIpc = (): void => {
       }
     },
   );
+
+  // 检查是否是子文件夹
+  ipcMain.handle("check-if-subfolder", (_, localFilesPath: string[], selectedDir: string) => {
+    const resolvedSelectedDir = resolve(selectedDir);
+    const allPaths = localFilesPath.map((p) => resolve(p));
+    return allPaths.some((existingPath) => {
+      const relativePath = relative(existingPath, resolvedSelectedDir);
+      return relativePath && !relativePath.startsWith("..") && !isAbsolute(relativePath);
+    });
+  });
 };
 
 export default initFileIpc;

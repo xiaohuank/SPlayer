@@ -37,10 +37,11 @@
 </template>
 
 <script setup lang="ts">
-import { isElectron } from "@/utils/helper";
+import { isElectron } from "@/utils/env";
 import { useStatusStore } from "@/stores";
-import player from "@/utils/player";
+import { usePlayer } from "@/utils/player";
 
+const player = usePlayer();
 const statusStore = useStatusStore();
 
 type PresetKey = keyof typeof presetList;

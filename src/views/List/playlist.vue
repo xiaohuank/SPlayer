@@ -50,17 +50,13 @@
           </n-h2>
           <n-collapse-transition :show="!listScrolling" class="collapse">
             <!-- 简介 -->
-            <n-ellipsis
+            <n-text
               v-if="playlistDetailData.description"
-              :line-clamp="1"
-              :tooltip="{
-                trigger: 'click',
-                placement: 'bottom',
-                width: 'trigger',
-              }"
+              class="description text-hidden"
+              @click.stop="openDescModal(playlistDetailData.description)"
             >
               {{ playlistDetailData.description }}
-            </n-ellipsis>
+            </n-text>
             <!-- 信息 -->
             <n-flex class="meta">
               <div class="item">
@@ -75,7 +71,7 @@
                 <SvgIcon name="Update" :depth="3" />
                 <n-text>{{ formatTimestamp(playlistDetailData.updateTime) }}</n-text>
               </div>
-              <div v-else-if="playlistDetailData.createTime" class="item">
+              <div v-if="playlistDetailData.createTime" class="item">
                 <SvgIcon name="Time" :depth="3" />
                 <n-text>{{ formatTimestamp(playlistDetailData.createTime) }}</n-text>
               </div>
@@ -194,6 +190,7 @@
         :loading="loading"
         :height="songListHeight"
         :playListId="playlistId"
+        :doubleClickAction="searchData?.length ? 'add' : 'all'"
         @scroll="listScroll"
         @removeSong="removeSong"
       />
@@ -227,11 +224,12 @@ import { renderToolbar } from "@/utils/meta";
 import { isLogin, toLikePlaylist, updateUserLikePlaylist } from "@/utils/auth";
 import { debounce } from "lodash-es";
 import { useDataStore, useStatusStore } from "@/stores";
-import { openBatchList, openUpdatePlaylist } from "@/utils/modal";
+import { openBatchList, openDescModal, openUpdatePlaylist } from "@/utils/modal";
 import { formatTimestamp } from "@/utils/time";
-import player from "@/utils/player";
+import { usePlayer } from "@/utils/player";
 
 const router = useRouter();
+const player = usePlayer();
 const dataStore = useDataStore();
 const statusStore = useStatusStore();
 
@@ -631,7 +629,7 @@ onMounted(() => getPlaylistDetail(playlistId.value));
         border-radius: 8px;
         height: 32px;
       }
-      :deep(.n-ellipsis) {
+      .description {
         margin-bottom: 8px;
         cursor: pointer;
       }

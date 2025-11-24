@@ -30,6 +30,14 @@
 
 - 欢迎各位大佬 `Star` 😍
 
+## 💬 交流群
+
+<a href="https://qm.qq.com/cgi-bin/qm/qr?k=2-cVSf1bE0AvAehCib00qFEFdUvPaJ_k&jump_from=webapi&authKey=1NEhib9+GsmsXVo2rCc0IbRaVHeeRXJJ0gbsyKDcIwDdAzYySOubkFCvkV32+7Cw" target="_blank">
+
+![交流群](/screenshots/welcome.png)
+
+</a>
+
 ## 👀 Demo
 
 - [SPlayer](https://music.imsyy.top/)

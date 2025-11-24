@@ -91,8 +91,10 @@
 <script setup lang="ts">
 import type { DropdownOption } from "naive-ui";
 import { useSettingStore } from "@/stores";
-import { isElectron, isDev, renderIcon } from "@/utils/helper";
+import { openLink, renderIcon } from "@/utils/helper";
 import { openSetting } from "@/utils/modal";
+import { isDev, isElectron } from "@/utils/env";
+import packageJson from "@/../package.json";
 
 const router = useRouter();
 const settingStore = useSettingStore();
@@ -123,7 +125,7 @@ const hideOrClose = (action: "hide" | "exit") => {
     settingStore.closeAppMethod = action;
   }
   showCloseModal.value = false;
-  window.electron.ipcRenderer.send(action === "hide" ? "win-hide" : "win-close");
+  window.electron.ipcRenderer.send(action === "hide" ? "win-hide" : "quit-app");
 };
 
 // 尝试关闭软件
@@ -154,7 +156,30 @@ const setOptions = computed<DropdownOption[]>(() => [
     ),
   },
   {
-    key: "header-divider",
+    key: "divider-1",
+    type: "divider",
+  },
+  {
+    // 交流群
+    key: "qq",
+    label: "加入交流群",
+    props: {
+      onClick: () =>
+        openLink(
+          "https://qm.qq.com/cgi-bin/qm/qr?k=2-cVSf1bE0AvAehCib00qFEFdUvPaJ_k&jump_from=webapi&authKey=1NEhib9+GsmsXVo2rCc0IbRaVHeeRXJJ0gbsyKDcIwDdAzYySOubkFCvkV32+7Cw",
+        ),
+    },
+    icon: renderIcon("QQ"),
+  },
+  {
+    // 交流群
+    key: "github",
+    label: "开源仓库",
+    props: { onClick: () => openLink(packageJson.github) },
+    icon: renderIcon("Github"),
+  },
+  {
+    key: "divider-2",
     type: "divider",
   },
   {
@@ -199,12 +224,9 @@ onMounted(() => {
   // 获取窗口状态并监听主进程的状态变更
   if (isElectron) {
     isMax.value = window.electron.ipcRenderer.sendSync("win-state");
-    window.electron.ipcRenderer.on(
-      "win-state-change",
-      (_event, value: boolean) => {
-        isMax.value = value;
-      },
-    );
+    window.electron.ipcRenderer.on("win-state-change", (_event, value: boolean) => {
+      isMax.value = value;
+    });
   }
 });
 </script>

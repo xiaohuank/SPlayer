@@ -1,10 +1,10 @@
 <template>
   <div class="setting">
     <div class="set-left">
-      <div class="title">
+      <n-flex class="title" :size="0" vertical>
         <n-h1>设置</n-h1>
         <n-text :depth="3">个性化与全局设置</n-text>
-      </div>
+      </n-flex>
       <!-- 设置菜单 -->
       <n-menu
         v-model:value="activeKey"
@@ -52,8 +52,9 @@
 <script setup lang="ts">
 import type { MenuOption, NScrollbar } from "naive-ui";
 import type { SettingType } from "@/types/main";
-import { isElectron, renderIcon } from "@/utils/helper";
+import { renderIcon } from "@/utils/helper";
 import packageJson from "@/../package.json";
+import { isElectron } from "@/utils/env";
 
 const props = defineProps<{ type: SettingType }>();
 
@@ -193,6 +194,12 @@ const toGithub = () => {
       &:last-child {
         margin-bottom: 0;
       }
+    }
+    .n-h {
+      display: inline-flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
     }
     .n-collapse-transition {
       margin-bottom: 12px;

@@ -13,12 +13,12 @@
       <n-card class="set-item">
         <div class="label">
           <n-text class="name">真实 IP 地址</n-text>
-          <n-text class="tip" :depth="3">可在此处输入国内 IP</n-text>
+          <n-text class="tip" :depth="3">可在此处输入国内 IP，不填写则为随机</n-text>
         </div>
         <n-input
           v-model:value="settingStore.realIP"
           :disabled="!settingStore.useRealIP"
-          placeholder="请填写真实 IP 地址"
+          placeholder="127.0.0.1"
           class="set"
         >
           <template #prefix>
@@ -123,7 +123,7 @@
 
 <script setup lang="ts">
 import { useSettingStore, useDataStore } from "@/stores";
-import { isElectron } from "@/utils/helper";
+import { isElectron } from "@/utils/env";
 import { debounce } from "lodash-es";
 
 const dataStore = useDataStore();

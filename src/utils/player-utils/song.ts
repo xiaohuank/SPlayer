@@ -1,8 +1,16 @@
 import { songUrl, unlockSongUrl } from "@/api/song";
 import { useDataStore, useMusicStore, useSettingStore, useStatusStore } from "@/stores";
-import type { SongType } from "@/types/main";
-import { isElectron } from "../helper";
+import type { QualityType, SongType } from "@/types/main";
+import { isElectron } from "../env";
 import { getCoverColorData } from "../color";
+import { handleSongQuality } from "../helper";
+
+export type NextPrefetchSong = {
+  id: number;
+  url: string | null;
+  ublock: boolean;
+  quality?: QualityType | undefined;
+} | null;
 
 /**
  * 获取当前播放歌曲
@@ -50,7 +58,7 @@ export const getPlayerInfo = (song?: SongType, sep: string = "/"): string | null
  */
 export const getOnlineUrl = async (
   id: number,
-): Promise<{ url: string | null; isTrial: boolean }> => {
+): Promise<{ url: string | null; isTrial: boolean; quality?: QualityType | undefined }> => {
   const settingStore = useSettingStore();
   const res = await songUrl(id, settingStore.songLevel);
   console.log(`🌐 ${id} music data:`, res);
@@ -69,8 +77,10 @@ export const getOnlineUrl = async (
         .replace(/m704\.music\.126\.net/g, "m701.music.126.net");
   // 若为试听且未开启试听播放，则将 url 置为空，仅标记为试听
   const finalUrl = isTrial && !settingStore.playSongDemo ? null : normalizedUrl;
-  console.log(`🎧 ${id} music url:`, finalUrl);
-  return { url: finalUrl, isTrial };
+  // 获取音质
+  const quality = handleSongQuality(songData, "online");
+  console.log(`🎧 ${id} music url:`, finalUrl, quality);
+  return { url: finalUrl, isTrial, quality };
 };
 
 /**
@@ -84,22 +94,35 @@ export const getUnlockSongUrl = async (songData: SongType): Promise<string | nul
     const artist = Array.isArray(songData.artists) ? songData.artists[0].name : songData.artists;
     const keyWord = songData.name + "-" + artist;
     if (!songId || !keyWord) return null;
-    // 尝试解锁
-    const results = await Promise.allSettled([
-      unlockSongUrl(songId, keyWord, "netease"),
-      unlockSongUrl(songId, keyWord, "kuwo"),
-    ]);
-    // 解析结果
-    const [neteaseRes, kuwoRes] = results;
-    if (
-      neteaseRes.status === "fulfilled" &&
-      neteaseRes.value.code === 200 &&
-      neteaseRes.value.url
-    ) {
-      return neteaseRes.value.url;
-    }
-    if (kuwoRes.status === "fulfilled" && kuwoRes.value.code === 200 && kuwoRes.value.url) {
-      return kuwoRes.value.url;
+    // 获取音源列表
+    const settingStore = useSettingStore();
+    const servers = settingStore.songUnlockServer
+      .filter((server) => server.enabled)
+      .map((server) => server.key);
+    if (servers.length === 0) return null;
+    // 并发请求
+    const promises = servers.map((server) =>
+      unlockSongUrl(songId, keyWord, server)
+        .then((result) => ({
+          server,
+          result,
+          success: result.code === 200 && !!result.url,
+        }))
+        .catch((err) => {
+          console.error(`Unlock failed with server ${server}:`, err);
+          return { server, result: null, success: false };
+        }),
+    );
+    // 按优先级顺序处理结果
+    for (const p of promises) {
+      try {
+        const item = await p;
+        if (item.success && item.result) {
+          return item.result.url;
+        }
+      } catch {
+        continue;
+      }
     }
     return null;
   } catch (error) {
@@ -127,4 +150,70 @@ export const getCoverColor = async (coverUrl: string) => {
     // 移除元素
     image.remove();
   };
+};
+
+/**
+ * 预载下一首歌曲播放地址
+ * @returns 预载数据
+ */
+export const getNextSongUrl = async (): Promise<NextPrefetchSong> => {
+  try {
+    const dataStore = useDataStore();
+    const statusStore = useStatusStore();
+    const settingStore = useSettingStore();
+
+    // 无列表或私人FM模式直接跳过
+    const playList = dataStore.playList;
+    if (!playList?.length || statusStore.personalFmMode) {
+      return null;
+    }
+
+    // 计算下一首（循环到首）
+    let nextIndex = statusStore.playIndex + 1;
+    if (nextIndex >= playList.length) nextIndex = 0;
+    const nextSong = playList[nextIndex];
+    if (!nextSong) {
+      return null;
+    }
+
+    // 本地歌曲：直接缓存 file URL
+    if (nextSong.path) {
+      const songId = nextSong.type === "radio" ? nextSong.dj?.id : nextSong.id;
+      return {
+        id: Number(songId || nextSong.id),
+        url: `file://${nextSong.path}`,
+        ublock: false,
+      };
+    }
+
+    // 在线歌曲：优先官方，其次解灰
+    const songId = nextSong.type === "radio" ? nextSong.dj?.id : nextSong.id;
+    if (!songId) {
+      return null;
+    }
+    const canUnlock = isElectron && nextSong.type !== "radio" && settingStore.useSongUnlock;
+    // 先请求官方地址
+    const { url: officialUrl, isTrial, quality } = await getOnlineUrl(songId);
+    if (officialUrl && !isTrial) {
+      // 官方可播放且非试听
+      return { id: songId, url: officialUrl, ublock: false, quality };
+    } else if (canUnlock) {
+      // 官方失败或为试听时尝试解锁
+      const unlockUrl = await getUnlockSongUrl(nextSong);
+      if (unlockUrl) {
+        return { id: songId, url: unlockUrl, ublock: true };
+      } else if (officialUrl && settingStore.playSongDemo) {
+        // 解锁失败，若官方为试听且允许试听，保留官方试听地址
+        return { id: songId, url: officialUrl, ublock: false };
+      } else {
+        return { id: songId, url: null, ublock: false };
+      }
+    } else {
+      // 不可解锁，仅保留官方结果（可能为空）
+      return { id: songId, url: officialUrl, ublock: false };
+    }
+  } catch (error) {
+    console.error("Error prefetching next song url:", error);
+    return null;
+  }
 };

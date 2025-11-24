@@ -1,7 +1,8 @@
 import { BrowserWindow } from "electron";
 import { createWindow } from "./index";
 import { useStore } from "../store";
-import { join } from "path";
+import { lyricWinUrl } from "../utils/config";
+import mainWindow from "./main-window";
 
 class LyricWindow {
   private win: BrowserWindow | null = null;
@@ -12,6 +13,10 @@ class LyricWindow {
    */
   private event(): void {
     if (!this.win) return;
+    // 准备好显示
+    this.win.on("ready-to-show", () => {
+      this.win?.show();
+    });
     // 歌词窗口缩放
     this.win?.on("resized", () => {
       const store = useStore();
@@ -19,6 +24,14 @@ class LyricWindow {
       if (bounds) {
         const { width, height } = bounds;
         store.set("lyric", { ...store.get("lyric"), width, height });
+      }
+    });
+    // 歌词窗口关闭
+    this.win?.on("close", () => {
+      this.win = null;
+      const mainWin = mainWindow?.getWin();
+      if (mainWin) {
+        mainWin?.webContents.send("closeDesktopLyric");
       }
     });
   }
@@ -32,10 +45,12 @@ class LyricWindow {
     this.win = createWindow({
       width: width || 800,
       height: height || 180,
-      minWidth: 440,
-      minHeight: 120,
-      maxWidth: 1600,
-      maxHeight: 300,
+      minWidth: 640,
+      minHeight: 140,
+      maxWidth: 1400,
+      maxHeight: 360,
+      // 没有指定位置时居中显示
+      center: !(x && y),
       // 窗口位置
       x,
       y,
@@ -56,7 +71,7 @@ class LyricWindow {
     });
     if (!this.win) return null;
     // 加载地址
-    this.win.loadFile(join(__dirname, "../main/web/lyric.html"));
+    this.win.loadURL(lyricWinUrl);
     // 窗口事件
     this.event();
     return this.win;
@@ -66,7 +81,8 @@ class LyricWindow {
    * @returns BrowserWindow | null
    */
   getWin(): BrowserWindow | null {
-    return this.win;
+    if (this.win && !this.win?.isDestroyed()) return this.win;
+    return null;
   }
 }
 

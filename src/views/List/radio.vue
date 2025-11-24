@@ -32,17 +32,13 @@
           </n-h2>
           <n-collapse-transition :show="!listScrolling" class="collapse">
             <!-- 简介 -->
-            <n-ellipsis
+            <n-text
               v-if="radioDetailData.description"
-              :line-clamp="1"
-              :tooltip="{
-                trigger: 'click',
-                placement: 'bottom',
-                width: 'trigger',
-              }"
+              class="description text-hidden"
+              @click="openDescModal(radioDetailData.description, '节目简介')"
             >
               {{ radioDetailData.description }}
-            </n-ellipsis>
+            </n-text>
             <!-- 信息 -->
             <n-flex class="meta">
               <div class="item">
@@ -156,6 +152,7 @@
         :loading="loading"
         :height="songListHeight"
         :radioId="radioId"
+        :doubleClickAction="searchData?.length ? 'add' : 'all'"
         type="radio"
         @scroll="listScroll"
       />
@@ -182,11 +179,13 @@ import { renderToolbar } from "@/utils/meta";
 import { debounce } from "lodash-es";
 import { useDataStore, useStatusStore } from "@/stores";
 import { radioAllProgram, radioDetail } from "@/api/radio";
-import player from "@/utils/player";
+import { usePlayer } from "@/utils/player";
 import { formatTimestamp } from "@/utils/time";
 import { toSubRadio } from "@/utils/auth";
+import { openDescModal } from "@/utils/modal";
 
 const router = useRouter();
+const player = usePlayer();
 const dataStore = useDataStore();
 const statusStore = useStatusStore();
 
@@ -456,7 +455,7 @@ onMounted(() => getRadioDetail(radioId.value));
         border-radius: 8px;
         height: 32px;
       }
-      :deep(.n-ellipsis) {
+      .description {
         margin-bottom: 8px;
         cursor: pointer;
       }

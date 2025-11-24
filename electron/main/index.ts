@@ -2,24 +2,35 @@ import { app, BrowserWindow } from "electron";
 import { electronApp } from "@electron-toolkit/utils";
 import { release, type } from "os";
 import { isMac } from "./utils/config";
+import { initSingleLock } from "./utils/single-lock";
 import { unregisterShortcuts } from "./shortcut";
 import { initTray, MainTray } from "./tray";
 import { processLog } from "./logger";
+import { existsSync, mkdirSync } from "fs";
+import { join } from "path";
 import initAppServer from "../server";
-import { initSingleLock } from "./utils/single-lock";
 import loadWindow from "./windows/load-window";
 import mainWindow from "./windows/main-window";
-import lyricWindow from "./windows/lyric-window";
 import initIpc from "./ipc";
 
 // 屏蔽报错
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
+// 便携模式下设置用户数据路径
+if (process.env.PORTABLE_EXECUTABLE_DIR) {
+  processLog.info(
+    "🔍 Portable mode detected, setting userData path to:",
+    join(process.env.PORTABLE_EXECUTABLE_DIR, "UserData"),
+  );
+  const userDataPath = join(process.env.PORTABLE_EXECUTABLE_DIR, "UserData");
+  if (!existsSync(userDataPath)) mkdirSync(userDataPath, { recursive: true });
+  app.setPath("userData", userDataPath);
+}
+
 // 主进程
 class MainProcess {
   // 窗口
   mainWindow: BrowserWindow | null = null;
-  lyricWindow: BrowserWindow | null = null;
   loadWindow: BrowserWindow | null = null;
   // 托盘
   mainTray: MainTray | null = null;
@@ -44,9 +55,8 @@ class MainProcess {
       // 启动窗口
       this.loadWindow = loadWindow.create();
       this.mainWindow = mainWindow.create();
-      this.lyricWindow = lyricWindow.create();
       // 注册其他服务
-      this.mainTray = initTray(this.mainWindow!, this.lyricWindow!);
+      this.mainTray = initTray(this.mainWindow!);
       // 注册 IPC 通信
       initIpc();
     });

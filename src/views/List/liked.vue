@@ -37,17 +37,13 @@
           <n-h2 class="name text-hidden"> 我喜欢的音乐 </n-h2>
           <n-collapse-transition :show="!listScrolling" class="collapse">
             <!-- 简介 -->
-            <n-ellipsis
+            <n-text
               v-if="playlistDetailData.description"
-              :line-clamp="1"
-              :tooltip="{
-                trigger: 'click',
-                placement: 'bottom',
-                width: 'trigger',
-              }"
+              class="description text-hidden"
+              @click="openDescModal(playlistDetailData.description)"
             >
               {{ playlistDetailData.description }}
-            </n-ellipsis>
+            </n-text>
             <!-- 信息 -->
             <n-flex class="meta">
               <div class="item">
@@ -58,7 +54,7 @@
                 <SvgIcon name="Update" :depth="3" />
                 <n-text>{{ formatTimestamp(playlistDetailData.updateTime) }}</n-text>
               </div>
-              <div v-else-if="playlistDetailData.createTime" class="item">
+              <div v-if="playlistDetailData.createTime" class="item">
                 <SvgIcon name="Time" :depth="3" />
                 <n-text>{{ formatTimestamp(playlistDetailData.createTime) }}</n-text>
               </div>
@@ -149,6 +145,7 @@
         :loading="loading"
         :height="songListHeight"
         :playListId="playlistId"
+        :doubleClickAction="searchData?.length ? 'add' : 'all'"
         @scroll="listScroll"
         @removeSong="removeSong"
       />
@@ -174,14 +171,15 @@ import { playlistDetail, playlistAllSongs } from "@/api/playlist";
 import { formatCoverList, formatSongsList } from "@/utils/format";
 import { coverLoaded, formatNumber, fuzzySearch, renderIcon } from "@/utils/helper";
 import { renderToolbar } from "@/utils/meta";
-import { debounce, isObject } from "lodash-es";
+import { debounce, isObject, uniqBy } from "lodash-es";
 import { useDataStore, useStatusStore } from "@/stores";
-import { openBatchList, openUpdatePlaylist } from "@/utils/modal";
+import { openBatchList, openDescModal, openUpdatePlaylist } from "@/utils/modal";
 import { formatTimestamp } from "@/utils/time";
 import { isLogin, updateUserLikePlaylist } from "@/utils/auth";
-import player from "@/utils/player";
+import { usePlayer } from "@/utils/player";
 
 const router = useRouter();
+const player = usePlayer();
 const dataStore = useDataStore();
 const statusStore = useStatusStore();
 
@@ -301,7 +299,8 @@ const getPlaylistData = async (id: number, getList: boolean, refresh: boolean) =
   if (isLogin() === 1 && (playlistDetailData.value?.count as number) < 800) {
     const ids: number[] = detail.privileges.map((song: any) => song.id as number);
     const result = await songDetail(ids);
-    playlistData.value = formatSongsList(result.songs);
+    // 直接批量详情返回时也进行一次按 id 去重
+    playlistData.value = uniqBy(formatSongsList(result.songs), "id");
   } else {
     await getPlaylistAllSongs(id, playlistDetailData.value.count || 0, refresh);
   }
@@ -316,7 +315,8 @@ const loadLikedCache = () => {
     playlistDetailData.value = dataStore.likeSongsList.detail;
   }
   if (dataStore.likeSongsList.data.length) {
-    playlistData.value = dataStore.likeSongsList.data;
+    // 去重缓存中的歌曲，避免重复展示与后续重复拼接
+    playlistData.value = uniqBy(dataStore.likeSongsList.data, "id");
   }
 };
 
@@ -338,11 +338,13 @@ const getPlaylistAllSongs = async (
     const result = await playlistAllSongs(id, limit, offset);
     const songData = formatSongsList(result.songs);
     listData.push(...songData);
-    if (!refresh) playlistData.value = playlistData.value.concat(songData);
+    // 非刷新模式下，增量拼接时进行去重，避免与缓存或上一页数据重复
+    if (!refresh) playlistData.value = uniqBy([...playlistData.value, ...songData], "id");
     // 更新数据
     offset += limit;
   } while (offset < count && isLikedPage.value);
-  if (refresh) playlistData.value = listData;
+  // 刷新模式下，统一以最终聚合数据为准，并进行去重
+  if (refresh) playlistData.value = uniqBy(listData, "id");
   // 关闭加载
   loadingMsgShow(false);
 };
@@ -418,7 +420,7 @@ onMounted(async () => {
       return;
     }
   }
-  
+
   // 获取我喜欢的音乐歌单ID
   const likedPlaylistId = dataStore.userLikeData.playlists?.[0]?.id;
   if (likedPlaylistId) {
@@ -536,7 +538,7 @@ onMounted(async () => {
         border-radius: 8px;
         height: 32px;
       }
-      :deep(.n-ellipsis) {
+      .description {
         margin-bottom: 8px;
         cursor: pointer;
       }

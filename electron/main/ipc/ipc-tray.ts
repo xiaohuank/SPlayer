@@ -1,23 +1,25 @@
 import { ipcMain } from "electron";
 import { getMainTray } from "../tray";
 import lyricWindow from "../windows/lyric-window";
+import { appName } from "../utils/config";
 
 /**
  * 托盘 IPC
  */
 const initTrayIpc = (): void => {
   const tray = getMainTray();
-  const lyricWin = lyricWindow.getWin();
 
   // 音乐播放状态更改
   ipcMain.on("play-status-change", (_, playStatus: boolean) => {
+    const lyricWin = lyricWindow.getWin();
     tray?.setPlayState(playStatus ? "play" : "pause");
-    lyricWin?.webContents.send("play-status-change", playStatus);
+    if (!lyricWin) return;
+    lyricWin.webContents.send("play-status-change", playStatus);
   });
 
   // 音乐名称更改
   ipcMain.on("play-song-change", (_, title) => {
-    if (!title) return;
+    if (!title) title = appName;
     // 更改标题
     tray?.setTitle(title);
     tray?.setPlayName(title);
@@ -34,7 +36,7 @@ const initTrayIpc = (): void => {
   });
 
   // 桌面歌词开关
-  ipcMain.on("change-desktop-lyric", (_, val: boolean) => {
+  ipcMain.on("toggle-desktop-lyric", (_, val: boolean) => {
     tray?.setDesktopLyricShow(val);
   });
 

@@ -47,7 +47,7 @@
       v-if="!statusStore.personalFmMode"
       :value="dataStore.playList?.length ?? 0"
       :show="settingStore.showPlaylistCount"
-      :max="999"
+      :max="9999"
       :style="{
         marginRight: settingStore.showPlaylistCount ? '12px' : null,
       }"
@@ -62,10 +62,12 @@
 <script setup lang="ts">
 import type { DropdownOption } from "naive-ui";
 import { useMusicStore, useStatusStore, useDataStore, useSettingStore } from "@/stores";
-import { isElectron, renderIcon } from "@/utils/helper";
-import player from "@/utils/player";
 import { openAutoClose, openChangeRate, openEqualizer } from "@/utils/modal";
+import { isElectron } from "@/utils/env";
+import { renderIcon } from "@/utils/helper";
+import { usePlayer } from "@/utils/player";
 
+const player = usePlayer();
 const dataStore = useDataStore();
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();

@@ -34,17 +34,13 @@
           </n-h2>
           <n-collapse-transition :show="!listScrolling" class="collapse">
             <!-- 简介 -->
-            <n-ellipsis
+            <n-text
               v-if="albumDetailData.description"
-              :line-clamp="1"
-              :tooltip="{
-                trigger: 'click',
-                placement: 'bottom',
-                width: 'trigger',
-              }"
+              class="description text-hidden"
+              @click="openDescModal(albumDetailData.description, '专辑简介')"
             >
               {{ albumDetailData.description }}
-            </n-ellipsis>
+            </n-text>
             <!-- 信息 -->
             <n-flex class="meta">
               <div class="item">
@@ -155,6 +151,7 @@
         :data="albumDataShow"
         :loading="loading"
         :height="songListHeight"
+        :doubleClickAction="searchData?.length ? 'add' : 'all'"
         hidden-album
         @scroll="listScroll"
       />
@@ -183,11 +180,12 @@ import { renderToolbar } from "@/utils/meta";
 import { useDataStore, useStatusStore } from "@/stores";
 import { debounce } from "lodash-es";
 import { formatTimestamp } from "@/utils/time";
-import { openJumpArtist } from "@/utils/modal";
-import player from "@/utils/player";
+import { openDescModal, openJumpArtist } from "@/utils/modal";
+import { usePlayer } from "@/utils/player";
 import { toLikeAlbum } from "@/utils/auth";
 
 const router = useRouter();
+const player = usePlayer();
 const dataStore = useDataStore();
 const statusStore = useStatusStore();
 
@@ -378,7 +376,7 @@ onMounted(() => {
         border-radius: 8px;
         height: 32px;
       }
-      :deep(.n-ellipsis) {
+      .description {
         margin-bottom: 8px;
         cursor: pointer;
       }
