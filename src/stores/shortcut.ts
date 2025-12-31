@@ -17,7 +17,10 @@ interface ShortcutStore {
     playNext: ShortcutType;
     volumeUp: ShortcutType;
     volumeDown: ShortcutType;
-    toogleDesktopLyric: ShortcutType;
+    "toggle-desktop-lyric": ShortcutType;
+    openPlayer: ShortcutType;
+    openPlayList: ShortcutType;
+    closePlayer: ShortcutType;
   };
 }
 
@@ -56,10 +59,28 @@ export const useShortcutStore = defineStore("shortcut", {
         globalShortcut: "CmdOrCtrl+Shift+Down",
       },
       // 桌面歌词
-      toogleDesktopLyric: {
+      "toggle-desktop-lyric": {
         name: "桌面歌词",
         shortcut: "CmdOrCtrl+KeyD",
         globalShortcut: "CmdOrCtrl+Shift+D",
+      },
+      // 打开播放界面
+      openPlayer: {
+        name: "打开播放界面",
+        shortcut: "KeyP",
+        globalShortcut: "",
+      },
+      // 打开播放列表
+      openPlayList: {
+        name: "打开播放列表",
+        shortcut: "KeyL",
+        globalShortcut: "",
+      },
+      // 关闭播放界面
+      closePlayer: {
+        name: "关闭播放界面",
+        shortcut: "Escape",
+        globalShortcut: "",
       },
     },
   }),

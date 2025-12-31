@@ -10,7 +10,12 @@
       </n-tag>
     </n-flex>
     <n-scrollbar style="max-height: 500px">
-      <div v-if="data?.releaseNotes" class="markdown-body" v-html="data.releaseNotes" />
+      <div
+        v-if="data?.releaseNotes"
+        class="markdown-body"
+        v-html="data.releaseNotes"
+        @click="handleMarkdownClick"
+      />
       <div v-else class="markdown-body">暂无更新日志</div>
     </n-scrollbar>
     <n-flex class="menu" justify="end">
@@ -34,6 +39,17 @@ const emit = defineEmits<{ close: [] }>();
 // 下载更新数据
 const downloadStatus = ref<boolean>(false);
 const downloadProgress = ref<number>(0);
+
+// 处理markdown中的链接点击
+const handleMarkdownClick = (event: MouseEvent) => {
+  const target = event.target as HTMLElement;
+  // 从事件目标向上遍历，查找最近的 <a> 标签
+  const anchor = target.closest("a");
+  if (anchor?.href) {
+    event.preventDefault();
+    window.open(anchor.href, "_blank");
+  }
+};
 
 // 开始更新
 const startDownload = async () => {
@@ -60,7 +76,7 @@ const startDownload = async () => {
 // 前往下载
 const goDownload = () => {
   emit("close");
-  window.open(packageJson.github + "/releases", "_blank");
+  window.open("https://splayer.imsyy.top/download.html", "_blank");
 };
 </script>
 

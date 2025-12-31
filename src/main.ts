@@ -9,13 +9,14 @@ import router from "@/router";
 import { debounceDirective, throttleDirective, visibleDirective } from "@/utils/instruction";
 // ipc
 import initIpc from "@/utils/initIpc";
+// use-store
+import { useSettingStore } from "@/stores";
+import { sendRegisterProtocol } from "@/utils/protocol";
 // 全局样式
 import "@/style/main.scss";
 import "@/style/animate.scss";
 import "github-markdown-css/github-markdown.css";
-
-// 初始化 ipc
-initIpc();
+import { isElectron } from "./utils/env";
 
 // 挂载
 const app = createApp(App);
@@ -31,3 +32,12 @@ app.directive("throttle", throttleDirective);
 app.directive("visible", visibleDirective);
 // app
 app.mount("#app");
+
+// 初始化 ipc
+initIpc();
+
+// 根据设置判断是否要注册协议
+if (isElectron) {
+  const settings = useSettingStore();
+  sendRegisterProtocol("orpheus", settings.registryProtocol.orpheus);
+}

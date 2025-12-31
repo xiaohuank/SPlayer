@@ -4,7 +4,7 @@
     <img
       v-if="settingStore.playerType === 'record'"
       class="pointer"
-      src="/images/pointer.png?assest"
+      src="/images/pointer.png?asset"
       alt="pointer"
     />
     <!-- 专辑图片 -->
@@ -12,6 +12,7 @@
       :key="musicStore.getSongCover()"
       :src="musicStore.getSongCover('l')"
       :observe-visibility="false"
+      object-fit="cover"
       class="cover-img"
     />
     <!-- 动态封面 -->
@@ -46,6 +47,17 @@ const dynamicCoverLoaded = ref<boolean>(false);
 
 // 视频元素
 const videoRef = ref<HTMLVideoElement | null>(null);
+
+// 清理动态封面资源
+const cleanupDynamicCover = () => {
+  if (videoRef.value) {
+    videoRef.value.pause();
+    videoRef.value.src = "";
+    videoRef.value.load();
+  }
+  dynamicCover.value = "";
+  dynamicCoverLoaded.value = false;
+};
 
 // 封面再放送
 const { start: dynamicCoverStart, stop: dynamicCoverStop } = useTimeoutFn(
@@ -89,6 +101,13 @@ watch(
 );
 
 onMounted(getDynamicCover);
+
+onBeforeUnmount(() => {
+  // 停止定时器
+  dynamicCoverStop();
+  // 清理动态封面资源
+  cleanupDynamicCover();
+});
 </script>
 
 <style lang="scss" scoped>
@@ -107,7 +126,6 @@ onMounted(getDynamicCover);
   .cover-img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
     z-index: 1;
     box-shadow: 0 0 20px 10px rgba(0, 0, 0, 0.1);
     transition: opacity 0.1s ease-in-out;

@@ -12,6 +12,20 @@
       </n-card>
       <n-card class="set-item">
         <div class="label">
+          <n-text class="name">本地文件夹显示模式</n-text>
+          <n-text class="tip" :depth="3">选择本地音乐页面文件夹的显示方式</n-text>
+        </div>
+        <n-select
+          class="set"
+          v-model:value="settingStore.localFolderDisplayMode"
+          :options="[
+            { label: '标签页模式', value: 'tab' },
+            { label: '下拉筛选模式', value: 'dropdown' },
+          ]"
+        />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
           <n-text class="name">显示本地默认歌曲目录</n-text>
         </div>
         <n-switch class="set" v-model:value="settingStore.showDefaultLocalPath" :round="false" />
@@ -26,7 +40,7 @@
             <template #icon>
               <SvgIcon name="Folder" />
             </template>
-            更改
+            添加
           </n-button>
         </n-flex>
         <n-collapse-transition :show="settingStore.localFilesPath.length > 0">
@@ -34,6 +48,7 @@
             v-for="(item, index) in settingStore.localFilesPath"
             :key="index"
             class="set-item"
+            content-style="padding: 4px 16px"
           >
             <div class="label">
               <n-text class="name">{{ item }}</n-text>
@@ -61,7 +76,7 @@
             <template #icon>
               <SvgIcon name="Folder" />
             </template>
-            更改
+            添加
           </n-button>
         </n-flex>
         <n-collapse-transition :show="settingStore.localLyricPath.length > 0">
@@ -69,6 +84,7 @@
             v-for="(item, index) in settingStore.localLyricPath"
             :key="index"
             class="set-item"
+            content-style="padding: 4px 16px"
           >
             <div class="label">
               <n-text class="name">{{ item }}</n-text>
@@ -83,6 +99,86 @@
       </n-card>
     </div>
     <div class="set-list">
+      <n-h3 prefix="bar"> 缓存配置 </n-h3>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">启用缓存</n-text>
+          <n-text class="tip" :depth="3">开启缓存会加快资源加载速度，但会占用更多磁盘空间</n-text>
+        </div>
+        <n-switch class="set" v-model:value="settingStore.cacheEnabled" :round="false" />
+      </n-card>
+      <n-collapse-transition :show="settingStore.cacheEnabled">
+        <n-card class="set-item">
+          <div class="label">
+            <n-text class="name">缓存大小上限</n-text>
+            <n-text class="tip" :depth="3">达到上限后将清理最旧的缓存，可以是小数，最低 2GB</n-text>
+          </div>
+          <n-input-group class="set">
+            <n-input-number
+              :value="cacheLimit"
+              :update-value-on-input="false"
+              :min="2"
+              :max="9999"
+              :style="{
+                width: cacheLimited ? '55%' : '0%',
+                transition: 'width 0.3s',
+              }"
+              @update:value="
+                (value) => {
+                  cacheLimit = value ?? 2;
+                  changeCacheLimit(cacheLimit);
+                }
+              "
+            />
+            <n-select
+              v-model:value="cacheLimited"
+              :options="[
+                { label: '不限制', value: 0 },
+                { label: cacheLimited === 0 ? '自定义大小 (GB)' : 'GB', value: 1 },
+              ]"
+              :style="{
+                width: cacheLimited ? '45%' : '100%',
+                transition: 'width 0.3s',
+              }"
+              @update:value="
+                (value) => {
+                  if (value === 0) {
+                    changeCacheLimit(0);
+                  } else {
+                    if (cacheLimit === 0) cacheLimit = 2;
+                    changeCacheLimit(cacheLimit);
+                  }
+                }
+              "
+            />
+          </n-input-group>
+        </n-card>
+        <n-card class="set-item">
+          <div class="label">
+            <n-text class="name">缓存目录</n-text>
+            <n-text class="tip" :depth="3">
+              {{ cachePath || "未配置时将使用默认缓存目录" }}
+            </n-text>
+          </div>
+          <n-flex>
+            <n-button strong secondary @click="confirmChangeCachePath">
+              <template #icon>
+                <SvgIcon name="Folder" />
+              </template>
+              更改
+            </n-button>
+          </n-flex>
+        </n-card>
+      </n-collapse-transition>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">缓存占用与清理</n-text>
+          <n-text class="tip" :depth="3">当前缓存占用：{{ cacheSizeDisplay }}</n-text>
+        </div>
+        <n-button type="error" strong secondary @click="confirmClearCache"> 清空缓存 </n-button>
+      </n-card>
+    </div>
+    <div v-if="statusStore.isDeveloperMode" class="set-list">
       <n-h3 prefix="bar"> 下载配置 </n-h3>
       <n-card class="set-item">
         <div class="label">
@@ -110,6 +206,19 @@
             更改
           </n-button>
         </n-flex>
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">默认下载音质</n-text>
+          <n-text class="tip" :depth="3">
+            默认使用的音质，实际可用音质取决于账号权限和歌曲资源
+          </n-text>
+        </div>
+        <n-select
+          v-model:value="settingStore.downloadSongLevel"
+          :options="downloadQualityOptions"
+          class="set"
+        />
       </n-card>
       <n-card class="set-item">
         <div class="label">
@@ -144,6 +253,67 @@
       </n-card>
       <n-card class="set-item">
         <div class="label">
+          <n-text class="name">同时下载歌词翻译</n-text>
+          <n-text class="tip" :depth="3">下载歌词时同时包含翻译</n-text>
+        </div>
+        <n-switch
+          v-model:value="settingStore.downloadLyricTranslation"
+          :disabled="!settingStore.downloadMeta || !settingStore.downloadLyric"
+          :round="false"
+          class="set"
+        />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">同时下载歌词音译</n-text>
+          <n-text class="tip" :depth="3">下载歌词时同时包含音译（罗马音）</n-text>
+        </div>
+        <n-switch
+          v-model:value="settingStore.downloadLyricRomaji"
+          :disabled="!settingStore.downloadMeta || !settingStore.downloadLyric"
+          :round="false"
+          class="set"
+        />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">音乐命名格式</n-text>
+          <n-text class="tip" :depth="3"> 选择下载文件的命名方式，建议包含歌手信息便于区分 </n-text>
+        </div>
+        <n-select
+          v-model:value="settingStore.fileNameFormat"
+          :options="fileNameFormatOptions"
+          class="set"
+        />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">文件智能分类</n-text>
+          <n-text class="tip" :depth="3"> 自动按歌手或歌手与专辑创建子文件夹进行分类 </n-text>
+        </div>
+        <n-select
+          v-model:value="settingStore.folderStrategy"
+          :options="folderStrategyOptions"
+          class="set"
+        />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">
+            模拟播放下载
+            <n-tag type="warning" size="small" round>Beta</n-tag>
+          </n-text>
+          <n-text class="tip" :depth="3">使用播放接口进行下载，可能解决部分下载失败问题</n-text>
+        </div>
+        <n-switch
+          :value="settingStore.usePlaybackForDownload"
+          :round="false"
+          class="set"
+          @update:value="handlePlaybackDownloadChange"
+        />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
           <n-text class="name">保留元信息文件</n-text>
           <n-text class="tip" :depth="3">是否在下载目录中保留元信息文件</n-text>
         </div>
@@ -159,16 +329,166 @@
 </template>
 
 <script setup lang="ts">
-import { useSettingStore } from "@/stores";
-import { changeLocalLyricPath, changeLocalMusicPath } from "@/utils/helper";
+import { useSettingStore, useStatusStore } from "@/stores";
+import { changeLocalLyricPath, changeLocalMusicPath, formatFileSize } from "@/utils/helper";
+import { songLevelData, getSongLevelsData } from "@/utils/meta";
+import { useCacheManager, type CacheResourceType } from "@/core/resource/CacheManager";
+import { pick } from "lodash-es";
 
+const statusStore = useStatusStore();
 const settingStore = useSettingStore();
+const cacheManager = useCacheManager();
+
+const cachePath = ref<string>("");
+const cacheSizeDisplay = ref<string>("--");
+const cacheLimit = ref<number>(10); // 本地状态
+const cacheLimited = ref<number>(1); // 是否限制缓存 (1 为限制)
+
+// 默认下载音质选项
+const downloadQualityOptions = computed(() => {
+  const levels = pick(songLevelData, ["l", "m", "h", "sq", "hr", "je", "sk", "db", "jm"]);
+  return getSongLevelsData(levels).map((item) => ({
+    label: item.name,
+    value: item.value,
+  }));
+});
+
+const fileNameFormatOptions = [
+  {
+    label: "歌曲名",
+    value: "title",
+  },
+  {
+    label: "歌手 - 歌曲名",
+    value: "artist-title",
+  },
+  {
+    label: "歌曲名 - 歌手",
+    value: "title-artist",
+  },
+];
+
+const folderStrategyOptions = [
+  {
+    label: "不分文件夹",
+    value: "none",
+  },
+  {
+    label: "按歌手分文件夹",
+    value: "artist",
+  },
+  {
+    label: "按 歌手 \\ 专辑 分文件夹",
+    value: "artist-album",
+  },
+];
 
 // 选择下载路径
 const choosePath = async () => {
   const path = await window.electron.ipcRenderer.invoke("choose-path");
   if (path) settingStore.downloadPath = path;
 };
+
+// 选择缓存路径并写回主进程 Store
+const changeCachePath = async () => {
+  const path = await window.electron.ipcRenderer.invoke("choose-path");
+  if (path) {
+    cachePath.value = path;
+    await window.api.store.set("cachePath", path);
+  }
+};
+
+// 确认更改缓存目录
+const confirmChangeCachePath = () => {
+  window.$dialog.warning({
+    title: "更改缓存目录",
+    content: "更改缓存目录不会自动移动已有缓存文件，建议在清空缓存后再更改目录。确定要继续吗？",
+    positiveText: "确定更改",
+    negativeText: "取消",
+    onPositiveClick: () => {
+      return changeCachePath();
+    },
+  });
+};
+
+// 更改缓存大小限制
+const changeCacheLimit = async (value: number) => {
+  await window.api.store.set("cacheLimit", value);
+};
+
+// 统计全部缓存目录占用大小
+const loadCacheSize = async () => {
+  const res = await cacheManager.getSize();
+  if (res.success && res.data !== undefined) {
+    cacheSizeDisplay.value = formatFileSize(res.data);
+  } else {
+    cacheSizeDisplay.value = "--";
+  }
+};
+
+// 清空所有缓存目录
+const clearCache = async () => {
+  const types: CacheResourceType[] = ["music", "lyrics", "local-data", "list-data"];
+  let hasError = false;
+  for (const type of types) {
+    const res = await cacheManager.clear(type);
+    if (!res.success) {
+      hasError = true;
+    }
+  }
+  await loadCacheSize();
+  if (hasError) {
+    window.$message.error("部分缓存清理失败");
+  } else {
+    window.$message.success("缓存已清空");
+  }
+};
+
+// 确认清空缓存
+const confirmClearCache = () => {
+  window.$dialog.warning({
+    title: "清空缓存",
+    content: "将删除所有缓存的音乐、歌词和本地数据，此操作不可恢复，确定要继续吗？",
+    positiveText: "清空缓存",
+    negativeText: "取消",
+    onPositiveClick: () => {
+      return clearCache();
+    },
+  });
+};
+
+// 模拟播放下载开关
+const handlePlaybackDownloadChange = (value: boolean) => {
+  if (value) {
+    window.$dialog.warning({
+      title: "开启提示",
+      content:
+        "模拟播放下载可能导致部分音质歌词嵌入异常且未经完整测试可能有不稳定情况，确认要打开吗？",
+      positiveText: "确认打开",
+      negativeText: "取消",
+      onPositiveClick: () => {
+        settingStore.usePlaybackForDownload = true;
+      },
+    });
+  } else {
+    settingStore.usePlaybackForDownload = false;
+  }
+};
+
+onMounted(async () => {
+  try {
+    const path = await window.api.store.get("cachePath");
+    cachePath.value = path || "";
+    const limit = await window.api.store.get("cacheLimit");
+    if (typeof limit === "number") {
+      cacheLimit.value = limit;
+      if (limit === 0) cacheLimited.value = 0;
+    }
+  } catch (error) {
+    console.error("读取缓存路径失败:", error);
+  }
+  await loadCacheSize();
+});
 </script>
 
 <style lang="scss" scoped>

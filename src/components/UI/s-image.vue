@@ -1,26 +1,25 @@
 <!-- 图片组件 -->
 <template>
-  <Transition name="fade" mode="out-in">
-    <div ref="imgContainer" :key="src" class="s-image">
-      <!-- 加载图片 -->
-      <Transition name="fade">
-        <img v-if="!isLoaded" :src="defaultSrc" class="loading" alt="loading" />
-      </Transition>
-      <!-- 真实图片 -->
-      <img
-        v-if="imgSrc"
-        ref="imgRef"
-        :src="imgSrc"
-        :key="imgSrc"
-        :alt="alt || 'image'"
-        :class="['cover', { loaded: isLoaded }]"
-        :decoding="decodeAsync ? 'async' : 'auto'"
-        :loading="nativeLazy ? 'lazy' : 'eager'"
-        @load="imageLoaded"
-        @error="imageError"
-      />
-    </div>
-  </Transition>
+  <div ref="imgContainer" :key="src" class="s-image">
+    <!-- 加载图片 -->
+    <Transition name="fade">
+      <img v-if="!isLoaded" :src="defaultSrc" class="loading" alt="loading" />
+    </Transition>
+    <!-- 真实图片 -->
+    <img
+      v-if="imgSrc"
+      ref="imgRef"
+      :src="imgSrc"
+      :key="imgSrc"
+      :alt="alt || 'image'"
+      :class="['cover', { loaded: isLoaded }]"
+      :decoding="decodeAsync ? 'async' : 'auto'"
+      :loading="nativeLazy ? 'lazy' : 'eager'"
+      :style="{ objectFit: objectFit }"
+      @load="imageLoaded"
+      @error="imageError"
+    />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -29,6 +28,8 @@ const props = withDefaults(
     src: string | undefined;
     defaultSrc?: string;
     alt?: string;
+    // 图片填充方式
+    objectFit?: "cover" | "contain" | "fill" | "none" | "scale-down";
     // 是否进行可视状态变化
     observeVisibility?: boolean;
     // 在不可视时是否释放图片以回收内存
@@ -39,11 +40,12 @@ const props = withDefaults(
     nativeLazy?: boolean;
   }>(),
   {
-    defaultSrc: "/images/song.jpg?assest",
+    defaultSrc: "/images/song.jpg?asset",
     observeVisibility: true,
     releaseOnHide: false,
     decodeAsync: true,
     nativeLazy: true,
+    objectFit: "cover",
   },
 );
 

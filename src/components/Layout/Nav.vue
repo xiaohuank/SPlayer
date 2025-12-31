@@ -31,29 +31,38 @@
       </n-dropdown>
     </n-flex>
     <!-- 客户端控制 -->
-    <n-flex v-if="isElectron" align="center" class="client-control">
+    <n-flex v-if="isElectron && useBorderless" align="center" class="client-control">
       <n-divider class="divider" vertical />
-      <n-button :focusable="false" title="最小化" tertiary circle @click="min">
-        <template #icon>
-          <SvgIcon name="WindowMinimize" />
-        </template>
-      </n-button>
-      <n-button
-        :focusable="false"
-        :title="isMax ? '还原' : '最大化'"
-        tertiary
-        circle
-        @click="maxOrRes"
-      >
-        <template #icon>
-          <SvgIcon :name="isMax ? 'WindowRestore' : 'WindowMaximize'" />
-        </template>
-      </n-button>
-      <n-button :focusable="false" title="关闭" tertiary circle @click="tryClose">
-        <template #icon>
-          <SvgIcon name="WindowClose" />
-        </template>
-      </n-button>
+      <div class="min-button-wrapper" @click="min" title="最小化">
+        <n-button :focusable="false" title="最小化" tertiary circle @click.stop="min">
+          <template #icon>
+            <SvgIcon name="WindowMinimize" />
+          </template>
+        </n-button>
+        <div class="min-expanded-area"></div>
+      </div>
+      <div class="max-button-wrapper" @click="maxOrRes" :title="isMax ? '还原' : '最大化'">
+        <n-button
+          :focusable="false"
+          :title="isMax ? '还原' : '最大化'"
+          tertiary
+          circle
+          @click.stop="maxOrRes"
+        >
+          <template #icon>
+            <SvgIcon :name="isMax ? 'WindowRestore' : 'WindowMaximize'" />
+          </template>
+        </n-button>
+        <div class="max-expanded-area"></div>
+      </div>
+      <div class="close-button-wrapper" @click="tryClose" title="关闭">
+        <n-button :focusable="false" title="关闭" tertiary circle @click.stop="tryClose">
+          <template #icon>
+            <SvgIcon name="WindowClose" />
+          </template>
+        </n-button>
+        <div class="close-expanded-area"></div>
+      </div>
     </n-flex>
     <!-- 关闭弹窗 -->
     <n-modal
@@ -91,10 +100,9 @@
 <script setup lang="ts">
 import type { DropdownOption } from "naive-ui";
 import { useSettingStore } from "@/stores";
-import { openLink, renderIcon } from "@/utils/helper";
+import { renderIcon } from "@/utils/helper";
 import { openSetting } from "@/utils/modal";
 import { isDev, isElectron } from "@/utils/env";
-import packageJson from "@/../package.json";
 
 const router = useRouter();
 const settingStore = useSettingStore();
@@ -102,6 +110,9 @@ const settingStore = useSettingStore();
 const showCloseModal = ref(false);
 // 是否记住
 const rememberNotAsk = ref(false);
+
+// 是否启用无边框窗口
+const useBorderless = ref(true);
 
 // 当前窗口状态
 const isMax = ref(false);
@@ -160,34 +171,11 @@ const setOptions = computed<DropdownOption[]>(() => [
     type: "divider",
   },
   {
-    // 交流群
-    key: "qq",
-    label: "加入交流群",
-    props: {
-      onClick: () =>
-        openLink(
-          "https://qm.qq.com/cgi-bin/qm/qr?k=2-cVSf1bE0AvAehCib00qFEFdUvPaJ_k&jump_from=webapi&authKey=1NEhib9+GsmsXVo2rCc0IbRaVHeeRXJJ0gbsyKDcIwDdAzYySOubkFCvkV32+7Cw",
-        ),
-    },
-    icon: renderIcon("QQ"),
-  },
-  {
-    // 交流群
-    key: "github",
-    label: "开源仓库",
-    props: { onClick: () => openLink(packageJson.github) },
-    icon: renderIcon("Github"),
-  },
-  {
-    key: "divider-2",
-    type: "divider",
-  },
-  {
     // 重启
     key: "restart",
     label: "软件热重载",
     show: isElectron,
-    props: { onClick: () => window.location.reload() },
+    props: { onClick: () => window.electron.ipcRenderer.send("win-reload") },
     icon: renderIcon("Restart"),
   },
   {
@@ -220,9 +208,13 @@ const setSelect = (key: string) => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
   // 获取窗口状态并监听主进程的状态变更
   if (isElectron) {
+    // 获取无边框窗口配置
+    const windowConfig = await window.api.store.get("window");
+    useBorderless.value = windowConfig?.useBorderless ?? true;
+    // 获取窗口状态
     isMax.value = window.electron.ipcRenderer.sendSync("win-state");
     window.electron.ipcRenderer.on("win-state-change", (_event, value: boolean) => {
       isMax.value = value;
@@ -259,6 +251,33 @@ onMounted(() => {
   .client-control {
     .divider {
       margin: 0 0 0 12px;
+    }
+    .min-button-wrapper,
+    .max-button-wrapper,
+    .close-button-wrapper {
+      position: relative;
+      cursor: pointer;
+    }
+    .min-expanded-area,
+    .max-expanded-area,
+    .close-expanded-area {
+      position: fixed;
+      top: 0;
+      width: 50px;
+      height: 70px;
+      background-color: transparent;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+      z-index: 1000;
+    }
+    .close-expanded-area {
+      right: 0;
+    }
+    .max-expanded-area {
+      right: 50px;
+    }
+    .min-expanded-area {
+      right: 100px;
     }
   }
 }

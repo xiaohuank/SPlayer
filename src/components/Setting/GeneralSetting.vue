@@ -29,8 +29,8 @@
       </n-card>
       <n-card class="set-item">
         <div class="label">
-          <n-text class="name">全局主题色</n-text>
-          <n-text class="tip" :depth="3">更改全局主题色</n-text>
+          <n-text class="name">主题配置</n-text>
+          <n-text class="tip" :depth="3">更改主题色或自定义图片</n-text>
         </div>
         <n-select
           v-model:value="settingStore.themeColorType"
@@ -49,9 +49,9 @@
           </div>
           <n-color-picker
             v-model:value="settingStore.themeCustomColor"
-            class="set"
             :show-alpha="false"
             :modes="['hex']"
+            class="set"
           />
         </n-card>
       </n-collapse-transition>
@@ -70,7 +70,7 @@
       <n-card class="set-item">
         <div class="label">
           <n-text class="name">全局动态取色</n-text>
-          <n-text class="tip" :depth="3">主题色是否跟随封面，目前感觉不好看</n-text>
+          <n-text class="tip" :depth="3">主题色是否跟随封面，开启后自定义主题色将失效</n-text>
         </div>
         <n-switch
           v-model:value="settingStore.themeFollowCover"
@@ -78,6 +78,13 @@
           class="set"
           :round="false"
         />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">字体设置</n-text>
+          <n-text class="tip" :depth="3"> 统一配置全局及歌词区域的字体 </n-text>
+        </div>
+        <n-button type="primary" strong secondary @click="openFontManager"> 配置 </n-button>
       </n-card>
     </div>
     <div class="set-list">
@@ -90,10 +97,40 @@
       </n-card>
       <n-card class="set-item">
         <div class="label">
+          <n-text class="name">搜索关键词建议</n-text>
+          <n-text class="tip" :depth="3">是否启用搜索关键词建议</n-text>
+        </div>
+        <n-switch class="set" v-model:value="settingStore.enableSearchKeyword" :round="false" />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">失焦自动清空搜索框</n-text>
+          <n-text class="tip" :depth="3">搜索框失去焦点后自动清空内容</n-text>
+        </div>
+        <n-switch class="set" v-model:value="settingStore.clearSearchOnBlur" :round="false" />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
           <n-text class="name">侧边栏显示封面</n-text>
           <n-text class="tip" :depth="3">是否显示歌单的封面，如果有</n-text>
         </div>
         <n-switch class="set" v-model:value="settingStore.menuShowCover" :round="false" />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">侧边栏隐藏</n-text>
+          <n-text class="tip" :depth="3">配置需要在侧边栏隐藏的菜单项</n-text>
+        </div>
+        <n-button type="primary" strong secondary @click="openSidebarHideManager"> 配置 </n-button>
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">首页栏目配置</n-text>
+          <n-text class="tip" :depth="3">调整首页各栏目的显示顺序或隐藏不需要的栏目</n-text>
+        </div>
+        <n-button type="primary" strong secondary @click="openHomePageSectionManager">
+          配置
+        </n-button>
       </n-card>
       <n-card class="set-item">
         <div class="label">
@@ -167,87 +204,6 @@
       </n-card>
       <n-card class="set-item">
         <div class="label">
-          <n-text class="name">自定义字体</n-text>
-          <n-text class="tip" :depth="3"> 更改软件内全局字体 </n-text>
-        </div>
-        <n-flex>
-          <Transition name="fade" mode="out-in">
-            <n-button
-              v-if="settingStore.globalFont !== 'default'"
-              type="primary"
-              strong
-              secondary
-              @click="settingStore.globalFont = 'default'"
-            >
-              恢复默认
-            </n-button>
-          </Transition>
-          <n-select
-            v-model:value="settingStore.globalFont"
-            :options="allFontsData"
-            class="set"
-            filterable
-          />
-        </n-flex>
-      </n-card>
-      <n-card class="set-item">
-        <div class="label">
-          <n-text class="name">歌词区域字体</n-text>
-          <n-text class="tip" :depth="3"> 是否独立更改歌词区域字体 </n-text>
-        </div>
-        <n-flex>
-          <Transition name="fade" mode="out-in">
-            <n-button
-              v-if="settingStore.LyricFont !== 'follow'"
-              type="primary"
-              strong
-              secondary
-              @click="settingStore.LyricFont = 'follow'"
-            >
-              恢复默认
-            </n-button>
-          </Transition>
-          <n-select
-            v-model:value="settingStore.LyricFont"
-            :options="[
-              { label: '跟随全局', value: 'follow' },
-              ...allFontsData.filter((v) => v.value !== 'default'),
-            ]"
-            class="set"
-            filterable
-          />
-        </n-flex>
-      </n-card>
-      <n-card class="set-item">
-        <div class="label">
-          <n-text class="name">日语歌词字体</n-text>
-          <n-text class="tip" :depth="3"> 是否在歌词为日语时单独设置字体 </n-text>
-        </div>
-        <n-flex>
-          <Transition name="fade" mode="out-in">
-            <n-button
-              v-if="settingStore.japaneseLyricFont !== 'follow'"
-              type="primary"
-              strong
-              secondary
-              @click="settingStore.japaneseLyricFont = 'follow'"
-            >
-              恢复默认
-            </n-button>
-          </Transition>
-          <n-select
-            v-model:value="settingStore.japaneseLyricFont"
-            :options="[
-              { label: '跟随全局', value: 'follow' },
-              ...allFontsData.filter((v) => v.value !== 'default'),
-            ]"
-            class="set"
-            filterable
-          />
-        </n-flex>
-      </n-card>
-      <n-card class="set-item">
-        <div class="label">
           <n-text class="name">关闭软件时</n-text>
           <n-text class="tip" :depth="3">选择关闭软件的方式</n-text>
         </div>
@@ -294,6 +250,34 @@
       </n-card>
       <n-card class="set-item">
         <div class="label">
+          <n-text class="name">无边框窗口模式</n-text>
+          <n-text class="tip" :depth="3">
+            是否开启无边框窗口模式，关闭后将使用系统原生边框（需重启）
+          </n-text>
+        </div>
+        <n-switch
+          v-model:value="useBorderless"
+          class="set"
+          :round="false"
+          @update:value="borderlessChange"
+        />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
+          <n-text class="name">通过 Orpheus 协议唤起本应用</n-text>
+          <n-text class="tip" :depth="3">
+            该协议通常用于官方网页端唤起官方客户端， 启用后可能导致官方客户端无法被唤起
+          </n-text>
+        </div>
+        <n-switch
+          v-model:value="settingStore.registryProtocol.orpheus"
+          class="set"
+          :round="false"
+          @update:value="orpheusChange"
+        />
+      </n-card>
+      <n-card class="set-item">
+        <div class="label">
           <n-text class="name">自动检查更新</n-text>
           <n-text class="tip" :depth="3">在每次开启软件时自动检查更新</n-text>
         </div>
@@ -307,20 +291,22 @@
 import type { SelectOption } from "naive-ui";
 import { useDataStore, useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import { isDev, isElectron } from "@/utils/env";
-import { getCoverColor } from "@/utils/player-utils/song";
 import { isEmpty } from "lodash-es";
 import themeColor from "@/assets/data/themeColor.json";
+import { openSidebarHideManager, openHomePageSectionManager, openFontManager } from "@/utils/modal";
+import { sendRegisterProtocol } from "@/utils/protocol";
+import { getCoverColor } from "@/utils/color";
 
 const dataStore = useDataStore();
 const musicStore = useMusicStore();
 const settingStore = useSettingStore();
 const statusStore = useStatusStore();
 
-// 全部字体
-const allFontsData = ref<SelectOption[]>([]);
-
 // 是否开启在线服务
 const useOnlineService = ref(settingStore.useOnlineService);
+
+// 是否开启无边框窗口
+const useBorderless = ref(true);
 
 // 全局主题色配置
 const themeColorOptions: SelectOption[] = [
@@ -337,31 +323,6 @@ const themeColorOptions: SelectOption[] = [
 // 关闭任务栏进度
 const closeTaskbarProgress = (val: boolean) => {
   if (!val) window.electron.ipcRenderer.send("set-bar", "none");
-};
-
-// 获取全部系统字体
-const getAllSystemFonts = async () => {
-  const allFonts = await window.electron.ipcRenderer.invoke("get-all-fonts");
-  allFonts.map((v: string) => {
-    // 去除前后的引号
-    v = v.replace(/^['"]+|['"]+$/g, "");
-    allFontsData.value.push({
-      label: v,
-      value: v,
-      style: {
-        fontFamily: v,
-      },
-    });
-  });
-  // 添加默认选项
-  allFontsData.value.unshift({
-    label: "系统默认",
-    value: "default",
-    style: {
-      fontFamily:
-        "v-sans, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'",
-    },
-  });
 };
 
 // 在线模式切换
@@ -402,7 +363,7 @@ const modeChange = (val: boolean) => {
         localStorage.removeItem("data-store");
         localStorage.removeItem("music-store");
         // 重启
-        if (!isDev) window.electron.ipcRenderer.send("win-reload");
+        if (!isDev) window.electron.ipcRenderer.send("win-restart");
       },
       onNegativeClick: () => {
         useOnlineService.value = true;
@@ -417,9 +378,26 @@ const themeGlobalColorChange = (val: boolean) => {
   if (val) getCoverColor(musicStore.songCover);
 };
 
-onMounted(() => {
+// 注册或取消注册协议
+const orpheusChange = async (isRegistry: boolean) => {
+  sendRegisterProtocol("orpheus", isRegistry);
+};
+
+// 无边框窗口切换
+const borderlessChange = async (val: boolean) => {
+  const windowConfig = await window.api.store.get("window");
+  window.api.store.set("window", {
+    ...windowConfig,
+    useBorderless: val,
+  });
+  window.$message.warning("设置已保存，重启软件后生效");
+};
+
+onMounted(async () => {
   if (isElectron) {
-    getAllSystemFonts();
+    // 获取无边框窗口配置
+    const windowConfig = await window.api.store.get("window");
+    useBorderless.value = windowConfig?.useBorderless ?? true;
   }
 });
 </script>

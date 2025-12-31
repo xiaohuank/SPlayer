@@ -1,4 +1,5 @@
 import { FastifyInstance } from "fastify";
+import { appVersion, appName } from "../../main/utils/config";
 import mainWindow from "../../main/windows/main-window";
 
 /**
@@ -77,9 +78,7 @@ export const initControlAPI = async (fastify: FastifyInstance) => {
             });
           }
 
-          // 这里可以根据当前播放状态来决定发送 play 还是 pause
-          // 暂时先发送 toggle 事件，如果渲染进程支持的话
-          mainWin.webContents.send("toggle");
+          mainWin.webContents.send("playOrPause");
 
           return reply.send({
             code: 200,
@@ -151,7 +150,7 @@ export const initControlAPI = async (fastify: FastifyInstance) => {
         }
       });
 
-      // 获取播放状态（可选功能）
+      // 获取状态
       fastify.get("/status", async (_request, reply) => {
         try {
           const mainWin = mainWindow.getWin();
@@ -163,12 +162,29 @@ export const initControlAPI = async (fastify: FastifyInstance) => {
             });
           }
 
-          // 这里可以通过 IPC 获取当前播放状态
-          // 暂时返回基本信息
+          // 获取环境信息
+          const environment = {
+            platform: process.platform,
+            arch: process.arch,
+            nodeVersion: process.versions.node,
+            electronVersion: process.versions.electron,
+            chromeVersion: process.versions.chrome,
+            v8Version: process.versions.v8,
+          };
+
+          // 返回完整状态
           return reply.send({
             code: 200,
             message: "获取状态成功",
             data: {
+              // 软件版本
+              version: {
+                app: appVersion,
+                name: appName,
+              },
+              // 环境数据
+              environment,
+              // 连接状态
               connected: true,
               window: "available",
             },

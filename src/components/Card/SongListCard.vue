@@ -11,7 +11,7 @@
         <n-image v-if="cover" :src="cover" preview-disabled lazy @load="coverLoaded">
           <template #placeholder>
             <div class="cover-loading">
-              <img src="/images/song.jpg?assest" class="loading-img" alt="loading-img" />
+              <img src="/images/song.jpg?asset" class="loading-img" alt="loading-img" />
             </div>
           </template>
         </n-image>
@@ -26,7 +26,7 @@
           >
             <template #placeholder>
               <div class="cover-loading">
-                <img src="/images/song.jpg?assest" class="loading-img" alt="loading-img" />
+                <img src="/images/song.jpg?asset" class="loading-img" alt="loading-img" />
               </div>
             </template>
           </n-image>
@@ -51,10 +51,11 @@
 import type { SongType } from "@/types/main";
 import { coverLoaded } from "@/utils/helper";
 import { sampleSize } from "lodash-es";
+import { VNodeChild } from "vue";
 
 const props = defineProps<{
   size: "normal" | "small";
-  title: string | VNode;
+  title: string | VNodeChild;
   data?: SongType[];
   description?: string;
   loading?: boolean;

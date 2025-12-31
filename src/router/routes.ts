@@ -225,6 +225,26 @@ const appRoutes: Array<RouteRecordRaw> = [
       },
     ],
   },
+  // 下载管理
+  {
+    path: "/download",
+    name: "download",
+    meta: { needApp: true },
+    component: () => import("@/views/Download/layout.vue"),
+    redirect: "/download/downloaded",
+    children: [
+      {
+        path: "downloaded",
+        name: "download-downloaded",
+        component: () => import("@/views/Download/downloaded.vue"),
+      },
+      {
+        path: "downloading",
+        name: "download-downloading",
+        component: () => import("@/views/Download/downloading.vue"),
+      },
+    ],
+  },
   // 本地歌曲
   {
     path: "/local",
@@ -247,6 +267,11 @@ const appRoutes: Array<RouteRecordRaw> = [
         path: "albums",
         name: "local-albums",
         component: () => import("@/views/Local/albums.vue"),
+      },
+      {
+        path: "folders",
+        name: "local-folders",
+        component: () => import("@/views/Local/folders.vue"),
       },
     ],
   },

@@ -1,18 +1,15 @@
 <template>
   <n-config-provider :theme="null">
-    <div
-      ref="desktopLyricRef"
-      :class="['desktop-lyric', { locked: lyricConfig.isLock, hovered: isHovered }]"
-    >
+    <div :class="['desktop-lyric', { locked: lyricConfig.isLock, hovered: isHovered }]">
       <div class="header" align="center" justify="space-between">
         <n-flex :wrap="false" align="center" justify="flex-start" size="small" @pointerdown.stop>
-          <div class="menu-btn" title="返回应用" @click.stop="sendToMain('win-show')">
+          <div class="menu-btn" @click.stop="sendToMain('win-show')">
             <SvgIcon name="Music" />
           </div>
-          <span class="song-name">{{ lyricData.playName }}</span>
+          <span class="song-name">{{ lyricData.playName }} - {{ lyricData.artistName }}</span>
         </n-flex>
         <n-flex :wrap="false" align="center" justify="center" size="small" @pointerdown.stop>
-          <div class="menu-btn" title="上一曲" @click.stop="sendToMainWin('playPrev')">
+          <div class="menu-btn" @click.stop="sendToMainWin('playPrev')">
             <SvgIcon name="SkipPrev" />
           </div>
           <div
@@ -22,26 +19,36 @@
           >
             <SvgIcon :name="lyricData.playStatus ? 'Pause' : 'Play'" />
           </div>
-          <div class="menu-btn" title="下一曲" @click.stop="sendToMainWin('playNext')">
+          <div class="menu-btn" @click.stop="sendToMainWin('playNext')">
             <SvgIcon name="SkipNext" />
           </div>
         </n-flex>
         <n-flex :wrap="false" align="center" justify="flex-end" size="small" @pointerdown.stop>
-          <div class="menu-btn" title="设置" @click.stop="sendToMain('open-setting', 'lyrics')">
+          <div class="menu-btn" @click.stop="sendToMain('open-setting', 'lyrics', 'desktop')">
             <SvgIcon name="Settings" />
           </div>
           <div
             class="menu-btn lock-btn"
-            :title="lyricConfig.isLock ? '解锁' : '锁定'"
             @mouseenter.stop="tempToggleLyricLock(false)"
             @mouseleave.stop="tempToggleLyricLock(true)"
             @click.stop="toggleLyricLock"
           >
             <SvgIcon :name="lyricConfig.isLock ? 'LockOpen' : 'Lock'" />
           </div>
-          <div class="menu-btn" title="关闭" @click.stop="sendToMain('closeDesktopLyric')">
+          <div class="menu-btn" @click.stop="sendToMain('close-desktop-lyric')">
             <SvgIcon name="Close" />
           </div>
+        </n-flex>
+        <!-- 歌曲信息 -->
+        <n-flex
+          v-if="lyricConfig.alwaysShowPlayInfo"
+          :size="0"
+          :class="['play-title', lyricConfig.position]"
+          :style="{ fontFamily: lyricConfig.fontFamily }"
+          vertical
+        >
+          <span class="name">{{ lyricData.playName }}</span>
+          <span class="artist">{{ lyricData.artistName }}</span>
         </n-flex>
       </div>
       <n-flex
@@ -64,6 +71,7 @@
             {
               active: line.active,
               'is-yrc': Boolean(lyricData?.yrcData?.length && line.line?.words?.length > 1),
+              'has-background-mask': lyricConfig.textBackgroundMask,
             },
           ]"
           :style="{
@@ -72,7 +80,9 @@
           :ref="(el) => line.active && (currentLineRef = el as HTMLElement)"
         >
           <!-- 逐字歌词渲染 -->
-          <template v-if="lyricData?.yrcData?.length && line.line?.words?.length > 1">
+          <template
+            v-if="lyricConfig.showYrc && lyricData?.yrcData?.length && line.line?.words?.length > 1"
+          >
             <span
               class="scroll-content"
               :style="getScrollStyle(line)"
@@ -131,6 +141,7 @@ import defaultDesktopLyricConfig from "@/assets/data/lyricConfig";
 // 桌面歌词数据
 const lyricData = reactive<LyricData>({
   playName: "",
+  artistName: "",
   playStatus: false,
   currentTime: 0,
   lyricLoading: false,
@@ -157,13 +168,31 @@ const { pause: pauseSeek, resume: resumeSeek } = useRafFn(() => {
   }
 });
 
+// 实时歌词索引
+const currentLyricIndex = computed(() => {
+  if (
+    (lyricConfig.showYrc && lyricData?.yrcData?.length) ||
+    (!lyricData?.yrcData?.length && lyricData?.lrcData?.length)
+  ) {
+    return lyricData.lyricIndex ?? -1;
+  }
+  // 自行计算
+  if (!lyricData.lrcData?.length) return -1;
+  let idx = -1;
+  for (let i = 0; i < lyricData.lrcData.length; i++) {
+    const line = lyricData.lrcData[i];
+    if (playSeekMs.value >= Number(line.startTime) && playSeekMs.value <= Number(line.endTime)) {
+      idx = i;
+      break;
+    }
+  }
+  return idx;
+});
+
 // 桌面歌词配置
 const lyricConfig = reactive<LyricConfig>({
   ...defaultDesktopLyricConfig,
 });
-
-// 桌面歌词元素
-const desktopLyricRef = ref<HTMLElement>();
 
 // hover 状态控制
 const isHovered = ref<boolean>(false);
@@ -183,6 +212,13 @@ const handleMouseMove = () => {
   // 设置 hover 状态（锁定和非锁定状态都响应）
   isHovered.value = true;
   startHoverTimer();
+};
+
+/**
+ * 处理鼠标移出窗口，重置 hover 状态
+ */
+const handleMouseLeave = () => {
+  isHovered.value = false;
 };
 
 /**
@@ -206,28 +242,34 @@ const getSafeEndTime = (lyrics: LyricLine[], idx: number) => {
 };
 
 /**
+ * 占位歌词行
+ * @param word 占位词
+ * @returns 占位歌词行数组
+ */
+const placeholder = (word: string): RenderLine[] => [
+  {
+    line: {
+      startTime: 0,
+      endTime: 0,
+      words: [{ word, startTime: 0, endTime: 0, romanWord: "" }],
+      translatedLyric: "",
+      romanLyric: "",
+      isBG: false,
+      isDuet: false,
+    },
+    index: -1,
+    key: "placeholder",
+    active: true,
+  },
+];
+
+/**
  * 渲染的歌词行
  * @returns 渲染的歌词行数组
  */
 const renderLyricLines = computed<RenderLine[]>(() => {
-  const lyrics = lyricData?.yrcData?.length ? lyricData.yrcData : lyricData.lrcData;
-  // 提示词占位
-  const placeholder = (word: string): RenderLine[] => [
-    {
-      line: {
-        startTime: 0,
-        endTime: 0,
-        words: [{ word, startTime: 0, endTime: 0, romanWord: "" }],
-        translatedLyric: "",
-        romanLyric: "",
-        isBG: false,
-        isDuet: false,
-      },
-      index: -1,
-      key: "placeholder",
-      active: true,
-    },
-  ];
+  const lyrics =
+    lyricConfig.showYrc && lyricData?.yrcData?.length ? lyricData.yrcData : lyricData.lrcData;
   // 无歌曲名且无歌词
   if (!lyricData.playName && !lyrics?.length) {
     return placeholder("SPlayer Desktop Lyric");
@@ -237,11 +279,11 @@ const renderLyricLines = computed<RenderLine[]>(() => {
   // 纯音乐
   if (!lyrics?.length) return placeholder("纯音乐，请欣赏");
   // 获取当前歌词索引
-  const idx = lyricData?.lyricIndex ?? -1;
+  const idx = currentLyricIndex.value;
   // 索引小于 0，显示歌曲名称
   if (idx < 0) {
-    const text = lyricData.playName ?? "未知歌曲";
-    return placeholder(text);
+    const playTitle = `${lyricData.playName} - ${lyricData.artistName}`;
+    return placeholder(playTitle);
   }
   const current = lyrics[idx];
   const next = lyrics[idx + 1];
@@ -334,7 +376,7 @@ const getYrcStyle = (wordData: LyricWord, lyricIndex: number) => {
   const startSec = currentLine.startTime || 0;
   const endSec = currentLine.endTime || 0;
   const isLineActive =
-    (seekSec >= startSec && seekSec < endSec) || lyricData.lyricIndex === lyricIndex;
+    (seekSec >= startSec && seekSec < endSec) || currentLyricIndex.value === lyricIndex;
 
   if (!isLineActive) {
     const hasPlayed = seekSec >= (wordData.endTime || 0);
@@ -411,24 +453,16 @@ const dragState = reactive({
 
 /**
  * 桌面歌词拖动开始
- * @param event 鼠标事件
+ * @param event 指针事件
  */
-const onDocMouseDown = async (event: MouseEvent) => {
+const onDocPointerDown = async (event: PointerEvent) => {
   if (lyricConfig.isLock) return;
-  // 仅左键触发
+  // 仅主按钮触发（鼠标左键或触摸）
   if (event.button !== 0) return;
   const target = event?.target as HTMLElement | null;
   if (!target) return;
   // 过滤 header 中的按钮：不触发拖拽
   if (target.closest(".menu-btn")) return;
-  startDrag(event);
-};
-
-/**
- * 桌面歌词拖动开始
- * @param event 鼠标事件
- */
-const startDrag = async (event: MouseEvent) => {
   dragState.isDragging = true;
   const { x, y } = await window.electron.ipcRenderer.invoke("get-window-bounds");
   const { width, height } = await window.api.store.get("lyric");
@@ -447,27 +481,25 @@ const startDrag = async (event: MouseEvent) => {
     height: safeHeight,
     fixed: true,
   });
-  dragState.startX = event?.screenX ?? 0;
-  dragState.startY = event?.screenY ?? 0;
+  dragState.startX = event.screenX ?? 0;
+  dragState.startY = event.screenY ?? 0;
   dragState.startWinX = x;
   dragState.startWinY = y;
   dragState.winWidth = safeWidth;
   dragState.winHeight = safeHeight;
-  document.addEventListener("mousemove", onDocMouseMove);
-  document.addEventListener("mouseup", onDocMouseUp);
+  document.addEventListener("pointermove", onDocPointerMove);
+  document.addEventListener("pointerup", onDocPointerUp);
   event.preventDefault();
 };
 
 /**
  * 桌面歌词拖动移动
- * @param event 鼠标事件
+ * @param event 指针事件
  */
-const onDocMouseMove = useThrottleFn((event: MouseEvent) => {
+const onDocPointerMove = useThrottleFn((event: PointerEvent) => {
   if (!dragState.isDragging || lyricConfig.isLock) return;
-  const screenX = event?.screenX ?? 0;
-  const screenY = event?.screenY ?? 0;
-  let newWinX = Math.round(dragState.startWinX + (screenX - dragState.startX));
-  let newWinY = Math.round(dragState.startWinY + (screenY - dragState.startY));
+  let newWinX = Math.round(dragState.startWinX + (event.screenX - dragState.startX));
+  let newWinY = Math.round(dragState.startWinY + (event.screenY - dragState.startY));
   // 是否限制在屏幕边界（支持多屏）- 使用缓存的边界数据同步计算
   if (lyricConfig.limitBounds) {
     newWinX = Math.round(
@@ -488,14 +520,15 @@ const onDocMouseMove = useThrottleFn((event: MouseEvent) => {
 
 /**
  * 桌面歌词拖动结束
+ * @param event 指针事件
  */
-const onDocMouseUp = () => {
+const onDocPointerUp = () => {
   if (!dragState.isDragging) return;
   // 关闭拖拽状态
   dragState.isDragging = false;
   // 移除全局监听
-  document.removeEventListener("mousemove", onDocMouseMove);
-  document.removeEventListener("mouseup", onDocMouseUp);
+  document.removeEventListener("pointermove", onDocPointerMove);
+  document.removeEventListener("pointerup", onDocPointerUp);
   requestAnimationFrame(() => {
     // 恢复拖拽前宽高
     window.electron.ipcRenderer.send("update-lyric-size", dragState.winWidth, dragState.winHeight);
@@ -586,12 +619,12 @@ const sendToMain = (eventName: string, ...args: any[]) => {
 
 // 发送至主窗口
 const sendToMainWin = (eventName: string, ...args: any[]) => {
-  window.electron.ipcRenderer.send("send-to-mainWin", eventName, ...args);
+  window.electron.ipcRenderer.send("send-to-main-win", eventName, ...args);
 };
 
 // 切换桌面歌词锁定状态
 const toggleLyricLock = () => {
-  sendToMain("toogleDesktopLyricLock", !lyricConfig.isLock);
+  sendToMain("toggle-desktop-lyric-lock", !lyricConfig.isLock);
   lyricConfig.isLock = !lyricConfig.isLock;
 };
 
@@ -602,7 +635,7 @@ const toggleLyricLock = () => {
 const tempToggleLyricLock = (isLock: boolean) => {
   // 是否已经解锁
   if (!lyricConfig.isLock) return;
-  window.electron.ipcRenderer.send("toogleDesktopLyricLock", isLock, true);
+  window.electron.ipcRenderer.send("toggle-desktop-lyric-lock", isLock, true);
 };
 
 onMounted(() => {
@@ -633,7 +666,7 @@ onMounted(() => {
     const height = fontSizeToHeight(config.fontSize);
     if (height) pushWindowHeight(height);
     // 是否锁定
-    sendToMain("toogleDesktopLyricLock", config.isLock);
+    sendToMain("toggle-desktop-lyric-lock", config.isLock);
   });
   // 请求歌词数据及配置
   window.electron.ipcRenderer.send("request-desktop-lyric-data");
@@ -645,19 +678,22 @@ onMounted(() => {
   } else {
     pauseSeek();
   }
-  // 拖拽入口
-  document.addEventListener("mousedown", onDocMouseDown);
+  // 拖拽入口（支持鼠标和触摸）
+  document.addEventListener("pointerdown", onDocPointerDown);
   // 监听鼠标移动，控制 hover 状态
   document.addEventListener("mousemove", handleMouseMove);
+  // 监听鼠标移出窗口，重置 hover 状态
+  document.addEventListener("mouseleave", handleMouseLeave);
 });
 
 onBeforeUnmount(() => {
   // 关闭 RAF
   pauseSeek();
   // 解绑事件
-  document.removeEventListener("mousedown", onDocMouseDown);
+  document.removeEventListener("pointerdown", onDocPointerDown);
   document.removeEventListener("mousemove", handleMouseMove);
-  if (dragState.isDragging) onDocMouseUp();
+  document.removeEventListener("mouseleave", handleMouseLeave);
+  if (dragState.isDragging) onDocPointerUp();
 });
 </script>
 
@@ -678,6 +714,7 @@ onBeforeUnmount(() => {
   transition: background-color 0.3s;
   cursor: default;
   .header {
+    position: relative;
     margin-bottom: 12px;
     cursor: default;
     // 子内容三等分grid
@@ -733,6 +770,36 @@ onBeforeUnmount(() => {
     .menu-btn {
       opacity: 0;
     }
+    .play-title {
+      position: absolute;
+      padding: 0 12px;
+      width: 100%;
+      text-align: left;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      z-index: 0;
+      span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+        padding: 0 4px;
+      }
+      .name {
+        line-height: normal;
+      }
+      .artist {
+        font-size: 12px;
+        opacity: 0.6;
+      }
+      &.center,
+      &.both {
+        text-align: center;
+      }
+      &.right {
+        text-align: right;
+      }
+    }
   }
   .lyric-container {
     height: 100%;
@@ -741,10 +808,19 @@ onBeforeUnmount(() => {
     .lyric-line {
       width: 100%;
       line-height: normal;
-      padding: 4px 0;
+      padding: 4px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      position: relative;
+      &.has-background-mask {
+        .scroll-content {
+          background-color: rgba(0, 0, 0, 0.5);
+          border-radius: 6px;
+          padding: 2px 8px;
+          display: inline-block;
+        }
+      }
       .scroll-content {
         display: inline-block;
         white-space: nowrap;
@@ -824,6 +900,9 @@ onBeforeUnmount(() => {
       .menu-btn {
         opacity: 1;
       }
+      .play-title {
+        opacity: 0;
+      }
     }
   }
   &.locked {
@@ -837,6 +916,9 @@ onBeforeUnmount(() => {
       .lock-btn {
         opacity: 1;
         pointer-events: auto;
+      }
+      .song-title {
+        opacity: 0;
       }
     }
   }

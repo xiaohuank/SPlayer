@@ -21,7 +21,11 @@
             <SvgIcon name="AddList" />
           </div>
           <!-- 下载 -->
-          <div class="menu-icon" @click.stop="openDownloadSong(musicStore.playSong)">
+          <div
+            class="menu-icon"
+            v-if="!musicStore.playSong.path"
+            @click.stop="openDownloadSong(musicStore.playSong)"
+          >
             <SvgIcon name="Download" />
           </div>
           <!-- 显示评论 -->
@@ -35,11 +39,21 @@
         </n-flex>
         <div class="center">
           <div class="btn">
+            <!-- 随机按钮 -->
+            <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
+              <div class="btn-icon mode-icon" @click.stop="player.toggleShuffle()">
+                <SvgIcon
+                  :name="statusStore.shuffleIcon"
+                  :size="20"
+                  :depth="statusStore.shuffleMode === 'off' ? 3 : 1"
+                />
+              </div>
+            </template>
             <!-- 不喜欢 -->
             <div
               v-if="statusStore.personalFmMode"
               class="btn-icon"
-              v-debounce="() => player.personalFMTrash(musicStore.personalFMSong?.id)"
+              v-debounce="() => songManager.personalFMTrash(musicStore.personalFMSong?.id)"
             >
               <SvgIcon class="icon" :size="18" name="ThumbDown" />
             </div>
@@ -73,12 +87,22 @@
             <div class="btn-icon" v-debounce="() => player.nextOrPrev('next')">
               <SvgIcon :size="26" name="SkipNext" />
             </div>
+            <!-- 循环按钮 -->
+            <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
+              <div class="btn-icon mode-icon" @click.stop="player.toggleRepeat()">
+                <SvgIcon
+                  :name="statusStore.repeatIcon"
+                  :size="20"
+                  :depth="statusStore.repeatMode === 'off' ? 3 : 1"
+                />
+              </div>
+            </template>
           </div>
           <!-- 进度条 -->
           <div class="slider">
-            <span>{{ msToTime(statusStore.currentTime) }}</span>
+            <span @click="toggleTimeFormat">{{ timeDisplay0 }}</span>
             <PlayerSlider :show-tooltip="false" />
-            <span>{{ msToTime(statusStore.duration) }}</span>
+            <span @click="toggleTimeFormat">{{ timeDisplay1 }}</span>
           </div>
         </div>
         <n-flex class="right" align="center" justify="end">
@@ -91,16 +115,29 @@
 </template>
 
 <script setup lang="ts">
-import { useMusicStore, useStatusStore, useDataStore } from "@/stores";
-import { msToTime } from "@/utils/time";
-import { openDownloadSong, openPlaylistAdd } from "@/utils/modal";
+import { usePlayerController } from "@/core/player/PlayerController";
+import { useSongManager } from "@/core/player/SongManager";
+import { useDataStore, useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import { toLikeSong } from "@/utils/auth";
-import { usePlayer } from "@/utils/player";
+import { getTimeDisplay, TIME_FORMATS } from "@/utils/format";
+import { openDownloadSong, openPlaylistAdd } from "@/utils/modal";
 
-const player = usePlayer();
 const dataStore = useDataStore();
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();
+const settingStore = useSettingStore();
+
+const songManager = useSongManager();
+const player = usePlayerController();
+
+const timeDisplay = getTimeDisplay(() => settingStore.timeFormatFullPlayer, statusStore);
+const timeDisplay0 = timeDisplay(0);
+const timeDisplay1 = timeDisplay(1);
+
+const toggleTimeFormat = () => {
+  const currentIndex = TIME_FORMATS.indexOf(settingStore.timeFormatFullPlayer);
+  settingStore.timeFormatFullPlayer = TIME_FORMATS[(currentIndex + 1) % TIME_FORMATS.length];
+};
 </script>
 
 <style lang="scss" scoped>
@@ -134,20 +171,20 @@ const statusStore = useStatusStore();
       cursor: pointer;
       .n-icon {
         font-size: 24px;
-        color: rgb(var(--main-color));
+        color: rgb(var(--main-cover-color));
       }
       &:hover {
         transform: scale(1.1);
-        background-color: rgba(var(--main-color), 0.14);
+        background-color: rgba(var(--main-cover-color), 0.14);
       }
       &:active {
         transform: scale(1);
       }
     }
     :deep(.n-badge-sup) {
-      background-color: rgba(var(--main-color), 0.14);
+      background-color: rgba(var(--main-cover-color), 0.14);
       .n-base-slot-machine {
-        color: rgb(var(--main-color));
+        color: rgb(var(--main-cover-color));
       }
     }
   }
@@ -171,17 +208,17 @@ const statusStore = useStatusStore();
         border-radius: 50%;
         will-change: transform;
         transition:
-          backdrop-filter 0.3s,
           background-color 0.3s,
           transform 0.3s;
         cursor: pointer;
+        margin: 0 4px;
+
         .n-icon {
-          color: rgb(var(--main-color));
+          color: rgb(var(--main-cover-color));
         }
         &:hover {
           transform: scale(1.1);
-          backdrop-filter: blur(10px);
-          background-color: rgba(var(--main-color), 0.14);
+          background-color: rgba(var(--main-cover-color), 0.14);
         }
         &:active {
           transform: scale(1);
@@ -190,21 +227,21 @@ const statusStore = useStatusStore();
       .play-pause {
         --n-width: 44px;
         --n-height: 44px;
-        --n-color: rgba(var(--main-color), 0.14);
-        --n-color-hover: rgba(var(--main-color), 0.2);
-        --n-color-focus: rgba(var(--main-color), 0.2);
-        --n-color-pressed: rgba(var(--main-color), 0.12);
+        --n-color: rgba(var(--main-cover-color), 0.14);
+        --n-color-hover: rgba(var(--main-cover-color), 0.2);
+        --n-color-focus: rgba(var(--main-cover-color), 0.2);
+        --n-color-pressed: rgba(var(--main-cover-color), 0.12);
         backdrop-filter: blur(10px);
         margin: 0 12px;
         transition:
           background-color 0.3s,
           transform 0.3s;
         .n-icon {
-          color: rgb(var(--main-color));
+          color: rgb(var(--main-cover-color));
           transition: opacity 0.1s ease-in-out;
         }
         :deep(.n-base-loading) {
-          color: rgb(var(--main-color));
+          color: rgb(var(--main-cover-color));
         }
         &:hover {
           transform: scale(1.1);
@@ -241,10 +278,10 @@ const statusStore = useStatusStore();
 }
 // slider
 .n-slider {
-  --n-rail-color: rgba(var(--main-color), 0.14);
-  --n-rail-color-hover: rgba(var(--main-color), 0.3);
-  --n-fill-color: rgb(var(--main-color));
-  --n-handle-color: rgb(var(--main-color));
-  --n-fill-color-hover: rgb(var(--main-color));
+  --n-rail-color: rgba(var(--main-cover-color), 0.14);
+  --n-rail-color-hover: rgba(var(--main-cover-color), 0.3);
+  --n-fill-color: rgb(var(--main-cover-color));
+  --n-handle-color: rgb(var(--main-cover-color));
+  --n-fill-color-hover: rgb(var(--main-cover-color));
 }
 </style>

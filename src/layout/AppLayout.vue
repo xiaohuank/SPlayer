@@ -73,26 +73,21 @@
     <!-- 全局播放器 -->
     <MainPlayer />
     <!-- 全屏播放器 -->
-    <Teleport to="body">
-      <Transition name="up" mode="out-in">
-        <FullPlayer
-          v-if="
-            statusStore.showFullPlayer ||
-            (statusStore.fullPlayerActive && settingStore.fullPlayerCache)
-          "
-        />
-      </Transition>
-    </Teleport>
+    <FullPlayer />
   </div>
 </template>
 
 <script setup lang="ts">
 import { useMusicStore, useStatusStore, useSettingStore } from "@/stores";
+import { useBlobURLManager } from "@/core/resource/BlobURLManager";
+import { isElectron } from "@/utils/env";
 import init from "@/utils/init";
 
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();
 const settingStore = useSettingStore();
+
+const blobURLManager = useBlobURLManager();
 
 // 主内容
 const contentRef = ref<HTMLElement | null>(null);
@@ -104,8 +99,16 @@ watchEffect(() => {
   statusStore.mainContentHeight = contentHeight.value;
 });
 
-onMounted(async () => {
-  await init();
+onMounted(() => {
+  init();
+  if (!isElectron) {
+    window.addEventListener("beforeunload", (event) => {
+      event.preventDefault();
+      // 释放所有 blob URL
+      blobURLManager.revokeAllBlobURLs();
+      event.returnValue = "";
+    });
+  }
 });
 </script>
 

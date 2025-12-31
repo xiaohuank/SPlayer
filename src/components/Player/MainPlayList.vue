@@ -3,7 +3,6 @@
   <n-drawer
     v-model:show="statusStore.playListShow"
     :class="{ 'full-player': statusStore.showFullPlayer }"
-    :style="{ '--main-color': statusStore.mainColor }"
     :auto-focus="false"
     id="main-playlist"
     style="width: 400px"
@@ -17,14 +16,16 @@
       </template>
       <Transition name="fade" mode="out-in">
         <!-- 播放列表 -->
-        <n-virtual-list
+        <VirtualScroll
           v-if="dataStore.playList.length"
           ref="playListRef"
-          :item-size="80"
+          :item-height="80"
+          :item-fixed="true"
           :items="playListData"
           :default-scroll-index="statusStore.playIndex"
           class="playlist-list"
           style="max-height: calc(100vh - 142px)"
+          :height="`calc(100vh - 142px)`"
         >
           <template #default="{ item: songData, index }">
             <div
@@ -32,7 +33,7 @@
               :class="['song-item', { on: statusStore.playIndex === index }]"
               v-debounce="
                 () => {
-                  player.togglePlayIndex(index);
+                  player.togglePlayIndex(index, true);
                   statusStore.playListShow = false;
                 }
               "
@@ -69,7 +70,7 @@
               </div>
             </div>
           </template>
-        </n-virtual-list>
+        </VirtualScroll>
         <n-empty
           v-else
           description="播放列表暂无歌曲，快去添加吧"
@@ -110,14 +111,14 @@
 
 <script setup lang="ts">
 import { useStatusStore, useDataStore } from "@/stores";
-import type { VirtualListInst } from "naive-ui";
-import { usePlayer } from "@/utils/player";
+import VirtualScroll from "@/components/UI/VirtualScroll.vue";
+import { usePlayerController } from "@/core/player/PlayerController";
 
-const player = usePlayer();
 const dataStore = useDataStore();
 const statusStore = useStatusStore();
+const player = usePlayerController();
 
-const playListRef = ref<VirtualListInst | null>(null);
+const playListRef = ref<InstanceType<typeof VirtualScroll> | null>(null);
 
 // 播放列表数据
 const playListData = computed(() => {
@@ -130,8 +131,8 @@ const playListData = computed(() => {
 });
 
 // 滚动至指定元素
-const scrollToItem = (index: number, behavior: "smooth" | "auto" = "smooth") => {
-  playListRef.value?.scrollTo({ index, behavior });
+const scrollToItem = (index: number) => {
+  playListRef.value?.scrollToIndex(index);
 };
 
 // 清空播放列表
@@ -262,13 +263,18 @@ const cleanPlayList = () => {
     padding: 0;
     height: 100%;
   }
+  .custom-virtual-list {
+    .n-scrollbar-content {
+      height: auto;
+    }
+  }
   .n-drawer-footer {
     height: 72px;
     padding: 16px;
   }
   &.full-player {
-    --n-color: rgb(var(--main-color));
-    --n-close-icon-color: rgba(var(--main-color), 0.58);
+    --n-color: rgb(var(--main-cover-color));
+    --n-close-icon-color: rgba(var(--main-cover-color), 0.58);
     background-color: transparent;
     box-shadow: none;
     .n-drawer-header,
@@ -278,25 +284,25 @@ const cleanPlayList = () => {
     a,
     span,
     .n-icon {
-      color: rgb(var(--main-color));
+      color: rgb(var(--main-cover-color));
     }
     .n-button {
-      --n-color: rgba(var(--main-color), 0.08);
-      --n-color-hover: rgba(var(--main-color), 0.12);
+      --n-color: rgba(var(--main-cover-color), 0.08);
+      --n-color-hover: rgba(var(--main-cover-color), 0.12);
       --n-color-pressed: var(--n-color);
       --n-color-focus: var(--n-color-hover);
     }
     .playlist-list {
       .song-item {
-        background-color: rgba(var(--main-color), 0.08);
+        background-color: rgba(var(--main-cover-color), 0.08);
         &.on {
-          border-color: rgb(var(--main-color));
+          border-color: rgb(var(--main-cover-color));
         }
         &:hover {
-          border-color: rgb(var(--main-color));
+          border-color: rgb(var(--main-cover-color));
         }
         .num {
-          color: rgba(var(--main-color), 0.52);
+          color: rgba(var(--main-cover-color), 0.52);
         }
       }
     }

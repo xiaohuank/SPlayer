@@ -24,7 +24,7 @@ const defaultMusicData: SongType = {
   name: "未播放歌曲",
   artists: "未知歌手",
   album: "未知专辑",
-  cover: "/images/song.jpg?assest",
+  cover: "/images/song.jpg?asset",
   duration: 0,
   free: 0,
   mv: null,
@@ -66,7 +66,7 @@ export const useMusicStore = defineStore("music", {
     isHasPlayer(state): boolean {
       return state.playSong?.id !== 0;
     },
-    // 歌曲封面
+    /** 歌曲封面 */
     songCover(state): string {
       return state.playSong.path
         ? state.playSong.cover
@@ -81,9 +81,10 @@ export const useMusicStore = defineStore("music", {
     /** 重置音乐数据 */
     resetMusicData() {
       this.playSong = { ...defaultMusicData };
+      this.playPlaylistId = 0;
       this.setSongLyric({ lrcData: [], yrcData: [] }, true);
       if (isElectron) {
-        window.electron.ipcRenderer.send("play-song-change", undefined);
+        window.electron.ipcRenderer.send("play-song-change", null);
       }
     },
     /**

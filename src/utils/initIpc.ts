@@ -1,11 +1,12 @@
-import { isElectron } from "./env";
-import { openSetting, openUpdateApp } from "./modal";
-import { useMusicStore, useDataStore, useStatusStore } from "@/stores";
-import { toLikeSong } from "./auth";
-import { usePlayer } from "./player";
-import { cloneDeep } from "lodash-es";
-import { getPlayerInfo } from "./player-utils/song";
+import { usePlayerController } from "@/core/player/PlayerController";
+import { useDataStore, useMusicStore, useStatusStore } from "@/stores";
 import { SettingType } from "@/types/main";
+import { handleProtocolUrl } from "@/utils/protocol";
+import { cloneDeep } from "lodash-es";
+import { toLikeSong } from "./auth";
+import { isElectron } from "./env";
+import { getPlayerInfoObj } from "./format";
+import { openSetting, openUpdateApp } from "./modal";
 
 // 关闭更新状态
 const closeUpdateStatus = () => {
@@ -17,7 +18,7 @@ const closeUpdateStatus = () => {
 const initIpc = () => {
   try {
     if (!isElectron) return;
-    const player = usePlayer();
+    const player = usePlayerController();
     // 播放
     window.electron.ipcRenderer.on("play", () => player.play());
     // 暂停
@@ -33,29 +34,34 @@ const initIpc = () => {
     // 音量减
     window.electron.ipcRenderer.on("volumeDown", () => player.setVolume("down"));
     // 播放模式切换
-    window.electron.ipcRenderer.on("changeMode", (_, mode) => player.togglePlayMode(mode));
+    window.electron.ipcRenderer.on("changeRepeat", (_, mode) => player.toggleRepeat(mode));
+    window.electron.ipcRenderer.on("toggleShuffle", (_, mode) => player.toggleShuffle(mode));
     // 喜欢歌曲
-    window.electron.ipcRenderer.on("toogleLikeSong", async () => {
+    window.electron.ipcRenderer.on("toggle-like-song", async () => {
       const dataStore = useDataStore();
       const musicStore = useMusicStore();
       await toLikeSong(musicStore.playSong, !dataStore.isLikeSong(musicStore.playSong.id));
     });
     // 开启设置
-    window.electron.ipcRenderer.on("openSetting", (_, type: SettingType) => openSetting(type));
+    window.electron.ipcRenderer.on("openSetting", (_, type: SettingType, scrollTo?: string) =>
+      openSetting(type, scrollTo),
+    );
     // 桌面歌词开关
-    window.electron.ipcRenderer.on("toogleDesktopLyric", () => player.toggleDesktopLyric());
+    window.electron.ipcRenderer.on("toggle-desktop-lyric", () => player.toggleDesktopLyric());
     // 显式关闭桌面歌词
-    window.electron.ipcRenderer.on("closeDesktopLyric", () => player.setDesktopLyricShow(false));
+    window.electron.ipcRenderer.on("close-desktop-lyric", () => player.setDesktopLyricShow(false));
     // 请求歌词数据
     window.electron.ipcRenderer.on("request-desktop-lyric-data", () => {
       const musicStore = useMusicStore();
       const statusStore = useStatusStore();
       if (player) {
+        const { name, artist } = getPlayerInfoObj() || {};
         window.electron.ipcRenderer.send(
           "update-desktop-lyric-data",
           cloneDeep({
             playStatus: statusStore.playStatus,
-            playName: getPlayerInfo(),
+            playName: name,
+            artistName: artist,
             currentTime: statusStore.currentTime,
             songId: musicStore.playSong?.id,
             songOffset: statusStore.getSongOffset(musicStore.playSong?.id),
@@ -81,6 +87,11 @@ const initIpc = () => {
       console.error("Error updating:", error);
       closeUpdateStatus();
       window.$message.error("更新过程出现错误");
+    });
+    // 协议数据
+    window.electron.ipcRenderer.on("protocol-url", (_, url) => {
+      console.log("📡 Received protocol url:", url);
+      handleProtocolUrl(url);
     });
   } catch (error) {
     console.log(error);
