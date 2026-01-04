@@ -174,6 +174,15 @@ class PlayerController {
       await audioManager.play(url, { fadeIn: !!fadeTime, fadeDuration: fadeTime, autoPlay });
       // 恢复进度
       if (seek > 0) audioManager.seek(seek / 1000);
+      // 如果不自动播放，设置任务栏暂停状态
+      if (!autoPlay) {
+        playerIpc.sendTaskbarMode("paused");
+        if (seek > 0) {
+          const duration = this.getDuration();
+          const progress = calculateProgress(seek, duration);
+          playerIpc.sendTaskbarProgress(progress);
+        }
+      }
     } catch (error) {
       console.error("❌ 音频播放失败:", error);
       throw error;
@@ -315,6 +324,8 @@ class PlayerController {
       lastfmScrobbler.resume();
       // IPC 通知
       playerIpc.sendPlayStatus(true);
+      playerIpc.sendTaskbarMode("normal");
+      playerIpc.sendTaskbarProgress(statusStore.progress);
       // ipcService.sendSongChange(playTitle, name || "", artist || "", album || "");
       console.log(`▶️ [${musicStore.playSong?.id}] 歌曲播放:`, name);
     });
@@ -328,6 +339,8 @@ class PlayerController {
       }
       if (!isElectron) window.document.title = "SPlayer";
       playerIpc.sendPlayStatus(false);
+      playerIpc.sendTaskbarMode("paused");
+      playerIpc.sendTaskbarProgress(statusStore.progress);
       lastfmScrobbler.pause();
       console.log(`⏸️ [${musicStore.playSong?.id}] 歌曲暂停`);
     });
@@ -416,6 +429,11 @@ class PlayerController {
       window.$message.error("本地文件无法播放");
       statusStore.playLoading = false;
       this.retryInfo.count = 0;
+      // 如果列表只有一首，直接停止
+      if (dataStore.playList.length <= 1) {
+        this.pause(true);
+        return;
+      }
       await this.nextOrPrev("next");
       return;
     }
@@ -950,22 +968,24 @@ class PlayerController {
 
   /**
    * 切换随机模式
-   * @param mode 可选，直接设置目标模式。如果不传则按 Off -> On -> Heartbeat -> Off 顺序轮转
+   * @param mode 可选，直接设置目标模式。如果不传则按 Off -> On -> Off 顺序轮转
+   * @note 心跳模式只能通过菜单开启（传入 "heartbeat" 参数），点击随机按钮不会进入心跳模式
+   * @note 当播放列表包含本地歌曲时，跳过心动模式，只在 Off 和 On 之间切换
    */
   public async toggleShuffle(mode?: ShuffleModeType) {
+    const dataStore = useDataStore();
     const statusStore = useStatusStore();
     const currentMode = statusStore.shuffleMode;
 
-    // 预判下一个模式
-    const nextMode = mode ?? this.playModeManager.calculateNextShuffleMode(currentMode);
+    // 检查播放列表是否包含本地歌曲
+    const hasLocalSongs = dataStore.playList.some((song) => song.path);
 
-    // 已经是心动模式，再次触发心动模式并播放
-    if (currentMode === "heartbeat" && nextMode === "heartbeat") {
-      if (!statusStore.playStatus) {
-        await this.play();
-      }
-      statusStore.showFullPlayer = true;
-      return;
+    // 预判下一个模式
+    let nextMode = mode ?? this.playModeManager.calculateNextShuffleMode(currentMode);
+
+    // 如果播放列表包含本地歌曲，跳过心动模式
+    if (hasLocalSongs && nextMode === "heartbeat") {
+      nextMode = "off";
     }
 
     // 如果模式确实改变了，才让 Manager 进行繁重的数据处理

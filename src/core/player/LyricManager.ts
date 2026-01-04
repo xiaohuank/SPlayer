@@ -1,10 +1,12 @@
-import { useStatusStore, useMusicStore, useSettingStore } from "@/stores";
 import { songLyric, songLyricTTML } from "@/api/song";
-import { type SongLyric } from "@/types/lyric";
-import { type LyricLine, parseLrc, parseTTML, parseYrc } from "@applemusic-like-lyrics/lyric";
-import { isElectron } from "@/utils/env";
-import { isEmpty } from "lodash-es";
+import { keywords as defaultKeywords, regexes as defaultRegexes } from "@/assets/data/exclude";
 import { useCacheManager } from "@/core/resource/CacheManager";
+import { useMusicStore, useSettingStore, useStatusStore } from "@/stores";
+import { type SongLyric } from "@/types/lyric";
+import { isElectron } from "@/utils/env";
+import { stripLyricMetadata } from "@/utils/lyricStripper";
+import { type LyricLine, parseLrc, parseTTML, parseYrc } from "@applemusic-like-lyrics/lyric";
+import { escapeRegExp, isEmpty } from "lodash-es";
 
 class LyricManager {
   /**
@@ -108,7 +110,8 @@ class LyricManager {
     // 同一时间的两/三行分别作为主句、翻译、音译
     const toTime = (line: LyricLine) => Number(line?.startTime ?? line?.words?.[0]?.startTime ?? 0);
     // 获取结束时间
-    const toEndTime = (line: LyricLine) => Number(line?.endTime ?? line?.words?.[line?.words?.length - 1]?.endTime ?? 0);
+    const toEndTime = (line: LyricLine) =>
+      Number(line?.endTime ?? line?.words?.[line?.words?.length - 1]?.endTime ?? 0);
     // 取内容
     const toText = (line: LyricLine) => String(line?.words?.[0]?.word || "").trim();
     const lrc = lyricData.lrcData || [];
@@ -159,7 +162,7 @@ class LyricManager {
     const isStale = () => this.activeLyricReq !== req || musicStore.playSong?.id !== id;
     // 处理 TTML 歌词
     const adoptTTML = async () => {
-      if (!settingStore.enableTTMLLyric) return;
+      if (!settingStore.enableOnlineTTMLLyric) return;
       let ttmlContent: string | null = await this.getRawLyricCache(id, "ttml");
       if (!ttmlContent) {
         ttmlContent = await songLyricTTML(id);
@@ -318,42 +321,57 @@ class LyricManager {
    * @returns 处理后的歌词数据
    */
   private handleLyricExclude(lyricData: SongLyric): SongLyric {
-    const statusStore = useStatusStore();
     const settingStore = useSettingStore();
-    const { enableExcludeLyrics, excludeKeywords, excludeRegexes } = settingStore;
-    // 未开启排除
+    const statusStore = useStatusStore();
+    const musicStore = useMusicStore();
+
+    const { enableExcludeLyrics, excludeUserKeywords, excludeUserRegexes } = settingStore;
+
     if (!enableExcludeLyrics) return lyricData;
-    // 处理正则表达式
-    const regexes = (excludeRegexes || []).map((r: string) => new RegExp(r));
-    /**
-     * 判断歌词是否被排除
-     * @param line 歌词行
-     * @returns 是否被排除
-     */
-    const isExcluded = (line: LyricLine) => {
-      const content = (line?.words || [])
-        .map((w) => String(w.word || ""))
-        .join("")
-        .trim();
-      if (!content) return true;
-      return (
-        (excludeKeywords || []).some((k: string) => content.includes(k)) ||
-        regexes.some((re) => re.test(content))
-      );
+
+    // 合并默认规则和用户自定义规则
+    const mergedKeywords = [...new Set([...defaultKeywords, ...(excludeUserKeywords ?? [])])];
+    const mergedRegexes = [...new Set([...defaultRegexes, ...(excludeUserRegexes ?? [])])];
+
+    const { name, artists } = musicStore.playSong;
+    const songMetadataRegexes: string[] = [];
+
+    // 例如第一行就是 `歌手 - 歌曲名` 这样的格式，或者只有歌曲名
+    if (name && name !== "未播放歌曲") {
+      songMetadataRegexes.push(escapeRegExp(name));
+    }
+
+    if (artists) {
+      if (typeof artists === "string") {
+        if (artists !== "未知歌手") {
+          songMetadataRegexes.push(escapeRegExp(artists));
+        }
+      } else if (Array.isArray(artists)) {
+        artists.forEach((artist) => {
+          if (artist.name) {
+            songMetadataRegexes.push(escapeRegExp(artist.name));
+          }
+        });
+      }
+    }
+
+    const options = {
+      keywords: mergedKeywords,
+      regexPatterns: mergedRegexes,
+      softMatchRegexes: songMetadataRegexes,
     };
-    /**
-     * 过滤排除的歌词行
-     * @param lines 歌词行数组
-     * @returns 过滤后的歌词行数组
-     */
-    const filterLines = (lines: LyricLine[]) => (lines || []).filter((l) => !isExcluded(l));
+
+    const lrcData = stripLyricMetadata(lyricData.lrcData || [], options);
+
+    let yrcData = lyricData.yrcData || [];
+
+    if (!statusStore.usingTTMLLyric || settingStore.enableExcludeTTML) {
+      yrcData = stripLyricMetadata(yrcData, options);
+    }
+
     return {
-      lrcData: filterLines(lyricData.lrcData || []),
-      yrcData:
-        // 若当前为 TTML 且开启排除
-        statusStore.usingTTMLLyric && settingStore.enableExcludeTTML
-          ? filterLines(lyricData.yrcData || [])
-          : lyricData.yrcData || [],
+      lrcData,
+      yrcData,
     };
   }
 
@@ -422,6 +440,12 @@ class LyricManager {
     if (this.isLyricDataEqual(musicStore.songLyric, lyricData)) {
       // 仅更新加载状态，不更新歌词数据
       statusStore.lyricLoading = false;
+      // 单曲循环时，歌词数据未变，需通知桌面歌词取消加载状态
+      if (isElectron) {
+        window.electron.ipcRenderer.send("update-desktop-lyric-data", {
+          lyricLoading: false,
+        });
+      }
       return;
     }
     // 设置歌词

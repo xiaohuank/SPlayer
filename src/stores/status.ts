@@ -52,7 +52,7 @@ interface StatusState {
   };
   /** 纯净歌词模式 */
   pureLyricMode: boolean;
-  /** 是否使用 TTML 歌词 */
+  /** 当前是否正使用 TTML 歌词 */
   usingTTMLLyric: boolean;
   /** 当前歌曲音质 */
   songQuality: QualityType | undefined;
@@ -255,13 +255,12 @@ export const useStatusStore = defineStore("status", {
     },
     /**
      * 切换随机模式
-     * 顺序: Off -> On -> Heartbeat -> Off
+     * 顺序: Off -> On -> Off
+     * @deprecated 心跳模式只能通过菜单开启，不再通过此方法切换
      */
     toggleShuffle() {
       if (this.shuffleMode === "off") {
         this.shuffleMode = "on";
-      } else if (this.shuffleMode === "on") {
-        this.shuffleMode = "heartbeat";
       } else {
         this.shuffleMode = "off";
       }

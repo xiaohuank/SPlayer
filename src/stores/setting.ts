@@ -1,10 +1,9 @@
 import { defineStore } from "pinia";
-import { keywords, regexes } from "@/assets/data/exclude";
 import { SongUnlockServer } from "@/core/player/SongManager";
 import type { SongLevelType } from "@/types/main";
 import { defaultAMLLDbServer } from "@/utils/meta";
 import { CURRENT_SETTING_SCHEMA_VERSION, settingMigrations } from "./migrations/settingMigrations";
-import { TimeFormat } from "@/utils/format";
+import { TimeFormat } from "@/composables/useTimeFormat";
 
 export interface SettingState {
   /** Schema 版本号（可选，用于数据迁移） */
@@ -76,6 +75,8 @@ export interface SettingState {
   downloadPath: string;
   /** 是否启用缓存 */
   cacheEnabled: boolean;
+  /** 是否缓存歌曲（音频文件） */
+  songCacheEnabled: boolean;
   /** 音乐命名格式 */
   fileNameFormat: "title" | "artist-title" | "title-artist";
   /** 文件智能分类 */
@@ -130,10 +131,8 @@ export interface SettingState {
   countDownShow: boolean;
   /** 显示歌词条 */
   barLyricShow: boolean;
-  /** 全局播放器时间格式 **/
-  timeFormatMainPlayer: TimeFormat;
-  /** 播放页面时间格式 */
-  timeFormatFullPlayer: TimeFormat;
+  /** 时间显示格式 **/
+  timeFormat: TimeFormat;
   /** 播放器类型 */
   playerType: "cover" | "record";
   /** 背景类型 */
@@ -142,6 +141,8 @@ export interface SettingState {
   playerBackgroundFps: number;
   /** 背景动画流动速度 */
   playerBackgroundFlowSpeed: number;
+  /** 背景动画是否在歌曲暂停时暂停 */
+  playerBackgroundPause: boolean;
   /** 播放器元素自动隐藏 */
   autoHidePlayerMeta: boolean;
   /** 记忆最后进度 */
@@ -166,9 +167,9 @@ export interface SettingState {
   playSongDemo: boolean;
   /** 显示搜索历史 */
   showSearchHistory: boolean;
-  /** 是否使用 AM 歌词 */
+  /** 是否使用 AMLL 歌词 */
   useAMLyrics: boolean;
-  /** 是否使用 AM 歌词弹簧效果 */
+  /** 是否使用 AMLL 歌词弹簧效果 */
   useAMSpring: boolean;
   /** 隐藏已播放歌词 */
   hidePassedLines: boolean;
@@ -177,7 +178,7 @@ export interface SettingState {
   /** 歌词时延调节步长（毫秒） */
   lyricOffsetStep: number;
   /** 是否启用在线 TTML 歌词 */
-  enableTTMLLyric: boolean;
+  enableOnlineTTMLLyric: boolean;
   /** AMLL DB 服务地址 */
   amllDbServer: string;
   /** 菜单显示封面 */
@@ -214,10 +215,10 @@ export interface SettingState {
   enableExcludeTTML: boolean;
   /** 「排除歌词」是否适用于本地歌词 */
   enableExcludeLocalLyrics: boolean;
-  /** 排除歌词关键字 */
-  excludeKeywords: string[];
-  /** 排除歌词正则表达式 */
-  excludeRegexes: string[];
+  /** 用户自定义的排除歌词关键字 */
+  excludeUserKeywords: string[];
+  /** 用户自定义的排除歌词正则表达式 */
+  excludeUserRegexes: string[];
   /** 显示默认本地路径 */
   showDefaultLocalPath: boolean;
   /** 本地文件夹显示模式 */
@@ -230,28 +231,31 @@ export interface SettingState {
   showSongPrivilegeTag: boolean;
   /** 显示原唱翻唱标签 */
   showSongOriginalTag: boolean;
-  /** 隐藏发现音乐 */
-  hideDiscover: boolean;
-  /** 隐藏私人漫游 */
-  hidePersonalFM: boolean;
-  /** 隐藏播客电台 */
-  hideRadioHot: boolean;
-  /** 隐藏我的收藏 */
-  hideLike: boolean;
-  /** 隐藏我的云盘 */
-  hideCloud: boolean;
-  /** 隐藏下载管理 */
-  hideDownload: boolean;
-  /** 隐藏本地歌曲 */
-  hideLocal: boolean;
-  /** 隐藏最近播放 */
-  hideHistory: boolean;
-  /** 隐藏创建的歌单 */
-  hideUserPlaylists: boolean;
-  /** 隐藏收藏的歌单 */
-  hideLikedPlaylists: boolean;
-  /** 隐藏心动模式 */
-  hideHeartbeatMode: boolean;
+  /** 侧边栏隐藏 */
+  sidebarHide: {
+    /** 隐藏发现音乐 */
+    hideDiscover: boolean;
+    /** 隐藏私人漫游 */
+    hidePersonalFM: boolean;
+    /** 隐藏播客电台 */
+    hideRadioHot: boolean;
+    /** 隐藏我的收藏 */
+    hideLike: boolean;
+    /** 隐藏我的云盘 */
+    hideCloud: boolean;
+    /** 隐藏下载管理 */
+    hideDownload: boolean;
+    /** 隐藏本地歌曲 */
+    hideLocal: boolean;
+    /** 隐藏最近播放 */
+    hideHistory: boolean;
+    /** 隐藏创建的歌单 */
+    hideUserPlaylists: boolean;
+    /** 隐藏收藏的歌单 */
+    hideLikedPlaylists: boolean;
+    /** 隐藏心动模式 */
+    hideHeartbeatMode: boolean;
+  };
   /** 启用搜索关键词获取 */
   enableSearchKeyword: boolean;
   /** 失焦后自动清空搜索框 */
@@ -337,12 +341,12 @@ export const useSettingStore = defineStore("setting", {
     ],
     countDownShow: true,
     barLyricShow: true,
-    timeFormatMainPlayer: "current-total",
-    timeFormatFullPlayer: "current-total",
+    timeFormat: "current-total",
     playerType: "cover",
     playerBackgroundType: "blur",
     playerBackgroundFps: 30,
     playerBackgroundFlowSpeed: 4,
+    playerBackgroundPause: false,
     autoHidePlayerMeta: true,
     memoryLastSeek: true,
     progressTooltipShow: true,
@@ -363,7 +367,7 @@ export const useSettingStore = defineStore("setting", {
     hidePassedLines: false,
     wordFadeWidth: 0.5,
     lyricOffsetStep: 500,
-    enableTTMLLyric: false,
+    enableOnlineTTMLLyric: false,
     amllDbServer: defaultAMLLDbServer,
     showYrc: true,
     showYrcAnimation: true,
@@ -376,8 +380,8 @@ export const useSettingStore = defineStore("setting", {
     enableExcludeLyrics: true,
     enableExcludeTTML: false,
     enableExcludeLocalLyrics: false,
-    excludeKeywords: keywords,
-    excludeRegexes: regexes,
+    excludeUserKeywords: [],
+    excludeUserRegexes: [],
     localFilesPath: [],
     localLyricPath: [],
     showDefaultLocalPath: true,
@@ -386,6 +390,7 @@ export const useSettingStore = defineStore("setting", {
     showLocalCover: true,
     downloadPath: "",
     cacheEnabled: true,
+    songCacheEnabled: true,
     fileNameFormat: "title-artist",
     folderStrategy: "none",
     downloadMeta: true,
@@ -405,17 +410,19 @@ export const useSettingStore = defineStore("setting", {
     showSongQuality: true,
     showSongPrivilegeTag: true,
     showSongOriginalTag: true,
-    hideDiscover: false,
-    hidePersonalFM: false,
-    hideRadioHot: false,
-    hideLike: false,
-    hideCloud: false,
-    hideDownload: false,
-    hideLocal: false,
-    hideHistory: false,
-    hideUserPlaylists: false,
-    hideLikedPlaylists: false,
-    hideHeartbeatMode: false,
+    sidebarHide: {
+      hideDiscover: false,
+      hidePersonalFM: false,
+      hideRadioHot: false,
+      hideLike: false,
+      hideCloud: false,
+      hideDownload: false,
+      hideLocal: false,
+      hideHistory: false,
+      hideUserPlaylists: false,
+      hideLikedPlaylists: false,
+      hideHeartbeatMode: false,
+    },
     enableSearchKeyword: true,
     clearSearchOnBlur: false,
     homePageSections: [

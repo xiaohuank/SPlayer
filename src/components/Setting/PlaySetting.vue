@@ -111,7 +111,7 @@
         />
       </n-card>
     </div>
-    <div v-if="isElectron && statusStore.isDeveloperMode" class="set-list">
+    <div v-if="isElectron" class="set-list">
       <n-h3 prefix="bar">
         音乐解锁
         <n-tag type="warning" size="small" round>Beta</n-tag>
@@ -235,20 +235,14 @@
             placeholder="请输入背景动画流动速度"
           />
         </n-card>
+        <n-card class="set-item">
+          <div class="label">
+            <n-text class="name">背景动画暂停时暂停</n-text>
+            <n-text class="tip" :depth="3">在暂停时是否也暂停背景动画</n-text>
+          </div>
+          <n-switch v-model:value="settingStore.playerBackgroundPause" class="set" :round="false" />
+        </n-card>
       </n-collapse-transition>
-      <n-card class="set-item">
-        <div class="label">
-          <n-text class="name">播放器时间样式</n-text>
-          <n-text class="tip" :depth="3"
-            >播放页面底部的时间如何显示（单击底部时间可以快速切换）</n-text
-          >
-        </div>
-        <n-select
-          v-model:value="settingStore.timeFormatFullPlayer"
-          :options="timeFormatOptions"
-          class="set"
-        />
-      </n-card>
       <n-card class="set-item">
         <div class="label">
           <n-text class="name">播放器主色跟随封面</n-text>
@@ -308,13 +302,13 @@
       <n-h3 prefix="bar"> 全局播放器 </n-h3>
       <n-card class="set-item">
         <div class="label">
-          <n-text class="name">底栏时间样式</n-text>
+          <n-text class="name">时间显示格式</n-text>
           <n-text class="tip" :depth="3">
-            全局播放器右侧的时间如何显示（单击底栏时间可以快速切换）
+            底栏右侧和播放页面底部的时间如何显示（单击时间可以快速切换）
           </n-text>
         </div>
         <n-select
-          v-model:value="settingStore.timeFormatMainPlayer"
+          v-model:value="settingStore.timeFormat"
           :options="timeFormatOptions"
           class="set"
         />
@@ -322,6 +316,7 @@
       <n-card class="set-item">
         <div class="label">
           <n-text class="name">播放列表歌曲数量</n-text>
+          <n-text class="tip" :depth="3"> 在右下角的播放列表按钮处显示播放列表的歌曲数量 </n-text>
         </div>
         <n-switch v-model:value="settingStore.showPlaylistCount" class="set" :round="false" />
       </n-card>
@@ -338,7 +333,7 @@
 
 <script setup lang="ts">
 import type { SelectOption } from "naive-ui";
-import { useSettingStore, useStatusStore } from "@/stores";
+import { useSettingStore } from "@/stores";
 import { isLogin } from "@/utils/auth";
 import { renderOption } from "@/utils/helper";
 import { isElectron } from "@/utils/env";
@@ -347,7 +342,6 @@ import { usePlayerController } from "@/core/player/PlayerController";
 import { openSongUnlockManager } from "@/utils/modal";
 
 const player = usePlayerController();
-const statusStore = useStatusStore();
 const settingStore = useSettingStore();
 // 输出设备数据
 const outputDevices = ref<SelectOption[]>([]);
