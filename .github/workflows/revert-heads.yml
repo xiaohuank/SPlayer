@@ -1,0 +1,88 @@
+# Add this file to the repo at .github/workflows/revert-heads.yml
+name: Revert latest commit on all branches
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+
+jobs:
+  revert-heads:
+    name: Revert HEAD on all remote branches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Revert HEAD for each origin branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git
+          git fetch origin --prune
+
+          branches=$(git for-each-ref --format='%(refname:short)' refs/remotes/origin | sed 's#origin/##' | grep -v '^HEAD$' || true)
+          echo "Branches to process: $branches"
+
+          for b in $branches; do
+            echo
+            echo "=== Processing: $b ==="
+            # Backup
+            echo "Creating backup branch: backup/$b-before-revert"
+            git push origin refs/heads/$b:refs/heads/backup/$b-before-revert || echo "Warning: backup push failed for $b"
+
+            # Prepare tmp branch
+            git fetch origin $b
+            git checkout -B tmp-revert-$b origin/$b
+
+            sha=$(git rev-parse origin/$b)
+            echo "Latest commit on origin/$b: $sha"
+
+            parents_line=$(git rev-list --parents -n 1 $sha || true)
+            parent_count=$(( $(echo "$parents_line" | wc -w) - 1 ))
+
+            if [ "$parent_count" -gt 1 ]; then
+              echo "Detected merge commit (parents=$parent_count). Attempting git revert -m 1..."
+              if git revert -m 1 --no-edit $sha; then
+                echo "Revert ok for merge commit on $b"
+              else
+                echo "Revert conflict for merge on $b — pushing conflict result to revert-conflict/$b and skipping auto push"
+                git push origin HEAD:refs/heads/revert-conflict/$b || true
+                git reset --hard origin/$b
+                continue
+              fi
+            else
+              echo "Normal commit. Attempting git revert --no-edit $sha ..."
+              if git revert --no-edit $sha; then
+                echo "Revert ok for $b"
+              else
+                echo "Revert conflict on $b — pushing conflict result to revert-conflict/$b and skipping auto push"
+                git push origin HEAD:refs/heads/revert-conflict/$b || true
+                git reset --hard origin/$b
+                continue
+              fi
+            fi
+
+            # Push revert: if blocked, push to revert/<branch>
+            echo "Trying to push revert commit back to origin/$b ..."
+            if git push origin HEAD:refs/heads/$b; then
+              echo "Pushed revert to origin/$b"
+            else
+              echo "Push to origin/$b failed (maybe protected). Pushing to origin/revert/$b ..."
+              git push origin HEAD:refs/heads/revert/$b || echo "Push to revert/$b also failed"
+            fi
+
+            # cleanup
+            git checkout - >/dev/null 2>&1 || true
+            git branch -D tmp-revert-$b >/dev/null 2>&1 || true
+          done
