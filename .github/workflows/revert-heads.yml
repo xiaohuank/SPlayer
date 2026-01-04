@@ -1,5 +1,4 @@
-# Add this file to the repo at .github/workflows/revert-heads.yml
-name: Revert latest commit on all branches
+name: Revert latest commit on all branches (no-backup)
 permissions:
   contents: write
 
@@ -8,7 +7,7 @@ on:
 
 jobs:
   revert-heads:
-    name: Revert HEAD on all remote branches
+    name: Revert HEAD on all remote branches (no backup)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo (full history)
@@ -22,7 +21,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Revert HEAD for each origin branch
+      - name: Revert HEAD for each origin branch (no backup)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -31,18 +30,20 @@ jobs:
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git
           git fetch origin --prune
 
-          branches=$(git for-each-ref --format='%(refname:short)' refs/remotes/origin | sed 's#origin/##' | grep -v '^HEAD$' || true)
+          # 列出 origin 下实际的远端分支（排除 HEAD / 单独的 origin 项）
+          branches=$(git for-each-ref --format='%(refname:short)' refs/remotes/origin/* 2>/dev/null || true)
+          branches=$(echo "$branches" | sed 's#^origin/##' | grep -v '^HEAD$' | grep -v '^origin$' || true)
           echo "Branches to process: $branches"
 
           for b in $branches; do
             echo
             echo "=== Processing: $b ==="
-            # Backup
-            echo "Creating backup branch: backup/$b-before-revert"
-            git push origin refs/heads/$b:refs/heads/backup/$b-before-revert || echo "Warning: backup push failed for $b"
 
-            # Prepare tmp branch
-            git fetch origin $b
+            # Checkout temporary branch from remote
+            if ! git fetch origin $b 2>/dev/null; then
+              echo "Warning: remote branch origin/$b not found — skipping"
+              continue
+            fi
             git checkout -B tmp-revert-$b origin/$b
 
             sha=$(git rev-parse origin/$b)
@@ -73,7 +74,7 @@ jobs:
               fi
             fi
 
-            # Push revert: if blocked, push to revert/<branch>
+            # Try push back to original branch; if blocked (protected), push to revert/<branch>
             echo "Trying to push revert commit back to origin/$b ..."
             if git push origin HEAD:refs/heads/$b; then
               echo "Pushed revert to origin/$b"
