@@ -60,6 +60,7 @@ class LyricWindow {
       x,
       y,
       transparent: true,
+      hasShadow: false,
       backgroundColor: "rgba(0, 0, 0, 0)",
       alwaysOnTop: true,
       resizable: true,
@@ -73,10 +74,15 @@ class LyricWindow {
       maximizable: false,
       // 窗口不能进入全屏状态
       fullscreenable: false,
+      webPreferences: {
+        zoomFactor: 1.0,
+      },
     });
     if (!this.win) return null;
     // 加载地址
-    this.win.loadURL(lyricWinUrl);
+    const url = new URL(lyricWinUrl);
+    url.searchParams.set("win", "desktop-lyric");
+    this.win.loadURL(url.toString());
     // 窗口事件
     this.event();
     return this.win;

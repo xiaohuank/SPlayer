@@ -46,7 +46,19 @@ const init = async () => {
   player.playModeSyncIpc();
   // 初始化自动关闭定时器
   if (statusStore.autoClose.enable) {
-    player.startAutoCloseTimer(statusStore.autoClose.time, statusStore.autoClose.remainTime);
+    const { endTime, time } = statusStore.autoClose;
+    const now = Date.now();
+
+    if (endTime > now) {
+      // 计算真实剩余时间
+      const realRemainTime = Math.ceil((endTime - now) / 1000);
+      player.startAutoCloseTimer(time, realRemainTime);
+    } else {
+      // 定时器已过期，重置状态
+      statusStore.autoClose.enable = false;
+      statusStore.autoClose.remainTime = time * 60;
+      statusStore.autoClose.endTime = 0;
+    }
   }
 
   if (isElectron) {
@@ -56,6 +68,8 @@ const init = async () => {
     downloadManager.init();
     // 显示窗口
     window.electron.ipcRenderer.send("win-loaded");
+    // 同步任务栏歌词状态
+    window.electron.ipcRenderer.send("taskbar:toggle", statusStore.showTaskbarLyric);
     // 显示桌面歌词
     window.electron.ipcRenderer.send("toggle-desktop-lyric", statusStore.showDesktopLyric);
     // 检查更新

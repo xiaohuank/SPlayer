@@ -3,9 +3,15 @@ import { useDataStore, useSettingStore } from "@/stores";
 import { isElectron } from "@/utils/env";
 import { saveAs } from "file-saver";
 import { cloneDeep } from "lodash-es";
-import { songDownloadUrl, songLyric, songUrl } from "@/api/song";
+import { songDownloadUrl, songLyric, songLyricTTML, songUrl, unlockSongUrl } from "@/api/song";
+import { qqMusicMatch } from "@/api/qqmusic";
+
 import { songLevelData } from "@/utils/meta";
 import { getPlayerInfoObj } from "@/utils/format";
+import { getConverter, type ConverterMode } from "@/utils/opencc";
+import { lyricLinesToTTML, parseQRCLyric, parseSmartLrc } from "@/utils/lyricParser";
+import { generateASS } from "@/utils/assGenerator";
+import { parseTTML, parseYrc, type LyricLine } from "@applemusic-like-lyrics/lyric";
 
 interface DownloadTask {
   song: SongType;
@@ -16,6 +22,8 @@ interface LyricResult {
   lrc?: { lyric: string };
   tlyric?: { lyric: string };
   romalrc?: { lyric: string };
+  yrc?: { lyric: string };
+  ttml?: { lyric: string };
 }
 
 class DownloadManager {
@@ -238,6 +246,7 @@ class DownloadManager {
     mode?: "standard" | "playback";
   }): Promise<{ success: boolean; skipped?: boolean; message?: string; status?: string }> {
     try {
+      const dataStore = useDataStore();
       const settingStore = useSettingStore();
       let url = "";
       let type = "mp3";
@@ -257,6 +266,60 @@ class DownloadManager {
           }
         } catch (e) {
           console.error("Error fetching playback url for download:", e);
+        }
+      }
+
+      // 尝试使用解锁接口获取下载链接
+      // 检查 VIP 权限
+      const isVipUser = dataStore.userData?.vipType > 0;
+      const isRestricted = song.free === 1 || song.free === 4 || song.free === 8;
+      const canUseUnlock = !isRestricted || isVipUser;
+
+      if (!url && settingStore.useUnlockForDownload && canUseUnlock) {
+        try {
+          const servers = settingStore.songUnlockServer.filter((s) => s.enabled).map((s) => s.key);
+          const artist = (Array.isArray(song.artists) ? song.artists[0]?.name : song.artists) || "";
+          const keyWord = `${song.name}-${artist}`;
+
+          if (servers.length > 0) {
+            // 并发请求所有启用的解锁服务
+            const results = await Promise.allSettled(
+              servers.map((server) =>
+                unlockSongUrl(song.id, keyWord, server).then((result) => ({
+                  server,
+                  result,
+                  success: result.code === 200 && !!result.url,
+                })),
+              ),
+            );
+
+            // 查找第一个成功的结果
+            for (const r of results) {
+              if (r.status === "fulfilled" && r.value.success) {
+                const unlockUrl = r.value?.result?.url;
+                if (unlockUrl) {
+                  url = unlockUrl;
+                  // 尝试推断类型
+                  const extensionMatch = url.match(/\.([a-z0-9]+)(?:[?#]|$)/i);
+                  const extension = extensionMatch ? extensionMatch[1].toLowerCase() : null;
+                  switch (extension) {
+                    case "flac":
+                    case "ogg":
+                    case "wav":
+                    case "m4a":
+                      type = extension;
+                      break;
+                    default:
+                      type = "mp3";
+                  }
+                  console.log(`🔓 [${song.id}] Unlock download URL found:`, url);
+                  break;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching unlock url for download:", e);
         }
       }
 
@@ -313,11 +376,78 @@ class DownloadManager {
       }
 
       if (isElectron) {
-        const { downloadMeta, downloadCover, downloadLyric, saveMetaFile } = settingStore;
+        const {
+          downloadMeta,
+          downloadCover,
+          downloadLyric,
+          saveMetaFile,
+          downloadMakeYrc,
+          downloadSaveAsAss,
+        } = settingStore;
         let lyric = "";
+        let yrcLyric = "";
+        let ttmlLyric = "";
+
         if (downloadLyric) {
           const lyricResult = (await songLyric(song.id)) as LyricResult;
-          lyric = this.processLyric(lyricResult);
+          lyric = await this.processLyric(lyricResult);
+
+          // 获取逐字歌词内容用于另存
+          if (downloadMakeYrc || downloadSaveAsAss) {
+            console.log(`[Download] Fetching verbatim lyrics for ${song.name} (${song.id})...`);
+            try {
+              const ttmlRes = await songLyricTTML(song.id);
+              if (typeof ttmlRes === "string") {
+                ttmlLyric = ttmlRes;
+              }
+              console.log(`[Download] TTML fetched: ${!!ttmlLyric}, len: ${ttmlLyric?.length}`);
+
+              // 如果没有 TTML，检查 YRC
+              if (!ttmlLyric) {
+                yrcLyric = lyricResult?.yrc?.lyric || "";
+                console.log(
+                  `[Download] YRC fetched from lrcResult: ${!!yrcLyric}, len: ${yrcLyric?.length}`,
+                );
+
+                // Fallback: 如果官方没有 YRC，尝试从 QM 获取
+                if (!yrcLyric) {
+                  try {
+                    const artistsStr = Array.isArray(song.artists)
+                      ? song.artists.map((a) => a.name).join("/")
+                      : String(song.artists || "");
+                    const keyword = `${song.name}-${artistsStr}`;
+                    console.log(`[Download] Trying QM fallback with keyword: ${keyword}`);
+                    const qmResult = await qqMusicMatch(keyword);
+                    if (qmResult?.code === 200 && qmResult?.qrc) {
+                      // 解析 QRC 歌词（包含翻译和音译对齐）
+                      const parsedLines = parseQRCLyric(
+                        qmResult.qrc,
+                        qmResult.trans,
+                        qmResult.roma,
+                      );
+                      if (parsedLines.length > 0) {
+                        // 转换为 TTML 格式
+                        ttmlLyric = lyricLinesToTTML(parsedLines);
+                        console.log(
+                          `[Download] QM QRC parsed and converted to TTML, lines: ${parsedLines.length}`,
+                        );
+                      } else {
+                        // 如果解析失败，保留原始 QRC
+                        yrcLyric = qmResult.qrc;
+                        console.log(
+                          `[Download] QM QRC fetched as fallback (raw), len: ${yrcLyric?.length}`,
+                        );
+                      }
+                    }
+                  } catch (e) {
+                    console.error("[Download] Error fetching QM lyrics as fallback:", e);
+                  }
+                }
+              }
+            } catch (e) {
+              console.error("[Download] Error fetching verbatim lyrics:", e);
+            }
+          }
         }
 
         const config = {
@@ -334,6 +464,99 @@ class DownloadManager {
         };
 
         const result = await window.electron.ipcRenderer.invoke("download-file", url, config);
+
+        if (result.status !== "cancelled" && result.status !== "error" && downloadMakeYrc) {
+          // 优先使用 TTML，其次 YRC
+          let content = ttmlLyric || yrcLyric;
+          if (content) {
+            try {
+              // 繁体转换
+              content = await this._convertToTraditionalIfNeeded(content);
+
+              const ext = ttmlLyric ? "ttml" : "yrc";
+              const fileName = `${safeFileName}.${ext}`;
+              const encoding = settingStore.downloadLyricEncoding || "utf-8";
+
+              // 如果是 TTML 且转换为非 UTF-8 编码，需要修改 XML 头部的 encoding 声明
+              if (ext === "ttml" && encoding !== "utf-8") {
+                content = content.replace(/encoding=["']utf-8["']/i, `encoding="${encoding}"`);
+              }
+
+              console.log(`[Download] Saving extra lyric file: ${fileName}`);
+              // 调用保存文件内容接口
+              const saveRes = await window.electron.ipcRenderer.invoke("save-file-content", {
+                path: targetPath,
+                fileName,
+                content,
+                encoding,
+              });
+              if (saveRes.success) {
+                console.log(`[Download] Saved verbatim lyric file successfully: ${fileName}`);
+              } else {
+                console.error(`[Download] Failed to save verbatim lyric file: ${saveRes.message}`);
+              }
+            } catch (e) {
+              console.error("[Download] Failed to save verbatim lyric file exception", e);
+            }
+          } else {
+            console.log("[Download] No verbatim lyrics found to save.");
+          }
+        }
+
+        if (result.status !== "cancelled" && result.status !== "error" && downloadSaveAsAss) {
+          try {
+            let lines: LyricLine[] = [];
+            // Try TTML
+            if (ttmlLyric) {
+              const parsed = parseTTML(ttmlLyric);
+              if (parsed?.lines) lines = parsed.lines;
+            }
+            // Try YRC (QRC)
+            else if (yrcLyric) {
+              // yrcLyric might be QRC XML
+              if (yrcLyric.trim().startsWith("<") || yrcLyric.includes("<QrcInfos>")) {
+                lines = parseQRCLyric(yrcLyric);
+              } else {
+                lines = parseYrc(yrcLyric) || [];
+              }
+            }
+            // Fallback to LRC (embedded lyric)
+            else if (lyric) {
+              const parsed = parseSmartLrc(lyric);
+              if (parsed?.lines) lines = parsed.lines;
+            }
+
+            if (lines.length > 0) {
+              let assContent = generateASS(lines, {
+                title: song.name,
+                artist: rawArtist,
+              });
+
+              // 繁体转换
+              assContent = await this._convertToTraditionalIfNeeded(assContent);
+
+              const fileName = `${safeFileName}.ass`;
+              const encoding = settingStore.downloadLyricEncoding || "utf-8";
+
+              console.log(`[Download] Saving ASS file: ${fileName}`);
+              const saveRes = await window.electron.ipcRenderer.invoke("save-file-content", {
+                path: targetPath,
+                fileName,
+                content: assContent,
+                encoding,
+              });
+
+              if (saveRes.success) {
+                console.log(`[Download] Saved ASS file successfully: ${fileName}`);
+              } else {
+                console.error(`[Download] Failed to save ASS file: ${saveRes.message}`);
+              }
+            }
+          } catch (e) {
+            console.error("[Download] Failed to save ASS file exception", e);
+          }
+        }
+
         if (result.status === "skipped") {
           return { success: true, skipped: true, message: result.message };
         }
@@ -359,7 +582,7 @@ class DownloadManager {
    * @param lyricResult 歌词结果
    * @returns 处理后的歌词字符串
    */
-  private processLyric(lyricResult: LyricResult): string {
+  private async processLyric(lyricResult: LyricResult): Promise<string> {
     const settingStore = useSettingStore();
     try {
       const rawLyric = lyricResult?.lrc?.lyric || "";
@@ -439,6 +662,9 @@ class DownloadManager {
       const lines: string[] = [];
       const lrcLinesRaw = lrc.split(/\r?\n/);
 
+      // 如果启用了另存逐字歌词，此时不替换内嵌歌词（processLyric 仅负责返回嵌入用的 LRC）
+      // YRC 的保存将在 processDownload 中独立处理
+
       for (const raw of lrcLinesRaw) {
         let m: RegExpExecArray | null;
         const timeTags: string[] = [];
@@ -472,7 +698,10 @@ class DownloadManager {
           }
         }
       }
-      return lines.join("\n");
+      const result = lines.join("\n");
+
+      // 繁体转换
+      return await this._convertToTraditionalIfNeeded(result);
     } catch (e) {
       console.error("Lyric processing failed", e);
       return "";
@@ -535,6 +764,20 @@ class DownloadManager {
     failedSongs.forEach((id) => {
       this.retryDownload(id);
     });
+  }
+  /**
+   * 繁体转换辅助方法
+   * @param text 需要转换的文本
+   * @returns 转换后的文本
+   */
+  private async _convertToTraditionalIfNeeded(text: string): Promise<string> {
+    const settingStore = useSettingStore();
+    if (settingStore.downloadLyricToTraditional && text) {
+      const variant = (settingStore.traditionalChineseVariant || "s2t") as ConverterMode;
+      const converter = await getConverter(variant);
+      return converter(text);
+    }
+    return text;
   }
 }
 

@@ -1,9 +1,11 @@
 <template>
   <div
+    ref="playerRef"
     :class="[
       'main-player',
       {
         show: musicStore.isHasPlayer && statusStore.showPlayBar,
+        player: statusStore.showFullPlayer,
       },
     ]"
   >
@@ -14,6 +16,7 @@
       <!-- 封面 -->
       <Transition name="fade" mode="out-in">
         <div
+          v-if="!settingStore.hiddenCovers.player"
           :key="musicStore.playSong.cover"
           class="cover"
           @click.stop="statusStore.showFullPlayer = true"
@@ -42,9 +45,17 @@
             <!-- 名称 -->
             <TextContainer
               :key="musicStore.playSong.name"
-              :text="musicStore.playSong.name"
+              :text="
+                settingStore.hideBracketedContent
+                  ? removeBrackets(musicStore.playSong.name)
+                  : musicStore.playSong.name
+              "
               :speed="0.2"
               class="name"
+              style="cursor: pointer"
+              @click.stop="
+                settingStore.hiddenCovers.player && (statusStore.showFullPlayer = true)
+              "
             />
             <!-- 倍速 -->
             <n-tag
@@ -91,11 +102,21 @@
                   class="ar-item"
                   @click="openJumpArtist(musicStore.playSong.artists, item.id)"
                 >
-                  {{ item.name }}
+                  {{
+                    settingStore.hideBracketedContent ? removeBrackets(item.name) : item.name
+                  }}
                 </n-text>
               </template>
-              <n-text v-else class="ar-item" @click="openJumpArtist(musicStore.playSong.artists)">
-                {{ musicStore.playSong.artists || "未知艺术家" }}
+              <n-text
+                v-else
+                class="ar-item"
+                @click="openJumpArtist(musicStore.playSong.artists)"
+              >
+                {{
+                  settingStore.hideBracketedContent
+                    ? removeBrackets(musicStore.playSong.artists)
+                    : musicStore.playSong.artists || "未知艺术家"
+                }}
               </n-text>
             </div>
           </Transition>
@@ -212,6 +233,7 @@ import { useSongManager } from "@/core/player/SongManager";
 import { useDataStore, useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import { toLikeSong } from "@/utils/auth";
 import { useTimeFormat } from "@/composables/useTimeFormat";
+import { useSwipe } from "@vueuse/core";
 import { copyData, coverLoaded, renderIcon } from "@/utils/helper";
 import {
   openAutoClose,
@@ -221,6 +243,7 @@ import {
   openPlaylistAdd,
 } from "@/utils/modal";
 import { convertSecondsToTime } from "@/utils/time";
+import { removeBrackets } from "@/utils/format";
 import type { DropdownOption } from "naive-ui";
 
 const router = useRouter();
@@ -233,6 +256,22 @@ const player = usePlayerController();
 const songManager = useSongManager();
 
 const { timeDisplay, toggleTimeFormat } = useTimeFormat();
+
+const playerRef = ref<HTMLElement | null>(null);
+
+// 触摸滑动切换歌曲
+const { direction } = useSwipe(playerRef, {
+  threshold: 50,
+  onSwipeEnd: () => {
+    if (direction.value === "left") {
+      // 左滑
+      player.nextOrPrev("next");
+    } else if (direction.value === "right") {
+      // 右滑
+      player.nextOrPrev("prev");
+    }
+  },
+});
 
 // 歌曲更多操作
 const songMoreOptions = computed<DropdownOption[]>(() => {
@@ -282,6 +321,7 @@ const songMoreOptions = computed<DropdownOption[]>(() => {
     {
       key: "search",
       label: "同名搜索",
+      show: settingStore.useOnlineService,
       props: {
         onClick: () => router.push({ name: "search", query: { keyword: song.name } }),
       },
@@ -315,6 +355,15 @@ const songMoreOptions = computed<DropdownOption[]>(() => {
       show: statusStore.isDeveloperMode && !isLocal && isSong,
       props: { onClick: () => openDownloadSong(musicStore.playSong) },
       icon: renderIcon("Download"),
+    },
+    {
+      key: "wiki",
+      label: "音乐百科",
+      show: !isLocal && isSong,
+      props: {
+        onClick: () => router.push({ name: "song-wiki", query: { id: musicStore.playSong.id } }),
+      },
+      icon: renderIcon("Info"),
     },
     {
       key: "comment",
@@ -368,7 +417,6 @@ const instantLyrics = computed(() => {
   padding: 0 15px;
   width: 100%;
   background-color: var(--surface-container-hex);
-  // background-color: rgba(var(--surface-container), 0.28);
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -587,6 +635,22 @@ const instantLyrics = computed(() => {
       &:hover {
         text-decoration: underline;
         text-decoration-color: var(--primary-hex);
+      }
+    }
+  }
+  @media (max-width: 1024px) {
+    .play-menu {
+      .time-container {
+        display: none !important;
+      }
+    }
+  }
+  @media (max-width: 810px) {
+    grid-template-columns: 1fr auto auto;
+    .play-control {
+      margin: 0 0 0 12px;
+      .play-icon {
+        display: none;
       }
     }
   }

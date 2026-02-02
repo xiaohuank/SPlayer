@@ -1,8 +1,10 @@
 import { usePlayerController } from "@/core/player/PlayerController";
+import * as playerIpc from "@/core/player/PlayerIpc";
 import { useDataStore, useMusicStore, useStatusStore } from "@/stores";
-import { SettingType } from "@/types/main";
+import type { SettingType } from "@/types/main";
 import { handleProtocolUrl } from "@/utils/protocol";
 import { cloneDeep } from "lodash-es";
+import { toRaw } from "vue";
 import { toLikeSong } from "./auth";
 import { isElectron } from "./env";
 import { getPlayerInfoObj } from "./format";
@@ -50,6 +52,39 @@ const initIpc = () => {
     window.electron.ipcRenderer.on("toggle-desktop-lyric", () => player.toggleDesktopLyric());
     // 显式关闭桌面歌词
     window.electron.ipcRenderer.on("close-desktop-lyric", () => player.setDesktopLyricShow(false));
+    // 任务栏歌词开关
+    window.electron.ipcRenderer.on("toggle-taskbar-lyric", () => player.toggleTaskbarLyric());
+    // 给任务栏歌词初始数据
+    window.electron.ipcRenderer.on("taskbar:request-data", () => {
+      const musicStore = useMusicStore();
+      const statusStore = useStatusStore();
+      const { name, artist } = getPlayerInfoObj() || {};
+      const cover = musicStore.playSong?.cover || "";
+
+      playerIpc.sendTaskbarMetadata({
+        title: name || "",
+        artist: artist || "",
+        cover,
+      });
+      playerIpc.sendTaskbarState({
+        isPlaying: statusStore.playStatus,
+      });
+
+      const lyricData = musicStore.songLyric;
+      if (lyricData.lrcData?.length || lyricData.yrcData?.length) {
+        const taskbarLyrics = lyricData.yrcData.length > 0 ? lyricData.yrcData : lyricData.lrcData;
+        playerIpc.sendTaskbarLyrics({
+          lines: toRaw(taskbarLyrics),
+          type: lyricData.yrcData.length > 0 ? "word" : "line",
+        });
+      }
+
+      playerIpc.sendTaskbarProgressData({
+        currentTime: statusStore.currentTime * 1000,
+        duration: statusStore.duration * 1000,
+        offset: statusStore.getSongOffset(musicStore.playSong?.id),
+      });
+    });
     // 请求歌词数据
     window.electron.ipcRenderer.on("request-desktop-lyric-data", () => {
       const musicStore = useMusicStore();
@@ -68,6 +103,7 @@ const initIpc = () => {
             lrcData: musicStore.songLyric.lrcData ?? [],
             yrcData: musicStore.songLyric.yrcData ?? [],
             lyricIndex: statusStore.lyricIndex,
+            lyricLoading: statusStore.lyricLoading,
           }),
         );
       }
@@ -92,6 +128,35 @@ const initIpc = () => {
     window.electron.ipcRenderer.on("protocol-url", (_, url) => {
       console.log("📡 Received protocol url:", url);
       handleProtocolUrl(url);
+    });
+    // 请求播放信息
+    window.electron.ipcRenderer.on("request-track-info", () => {
+      const musicStore = useMusicStore();
+      const statusStore = useStatusStore();
+      const { name, artist, album } = getPlayerInfoObj() || {};
+      // 获取原始对象
+      const playSong = toRaw(musicStore.playSong);
+      const songLyric = statusStore.lyricLoading
+        ? { lrcData: [], yrcData: [] }
+        : toRaw(musicStore.songLyric);
+      window.electron.ipcRenderer.send(
+        "return-track-info",
+        cloneDeep({
+          playStatus: statusStore.playStatus,
+          playName: name,
+          artistName: artist,
+          albumName: album,
+          currentTime: statusStore.currentTime,
+          // 音量及播放速率
+          volume: statusStore.playVolume,
+          playRate: statusStore.playRate,
+          ...playSong,
+          // 歌词及加载状态
+          lyricLoading: statusStore.lyricLoading,
+          lyricIndex: statusStore.lyricIndex,
+          ...songLyric,
+        }),
+      );
     });
   } catch (error) {
     console.log(error);

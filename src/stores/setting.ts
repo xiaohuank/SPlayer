@@ -1,34 +1,32 @@
-import { defineStore } from "pinia";
+import { TimeFormat } from "@/composables/useTimeFormat";
 import { SongUnlockServer } from "@/core/player/SongManager";
 import type { SongLevelType } from "@/types/main";
 import { defaultAMLLDbServer } from "@/utils/meta";
+import { defineStore } from "pinia";
 import { CURRENT_SETTING_SCHEMA_VERSION, settingMigrations } from "./migrations/settingMigrations";
-import { TimeFormat } from "@/composables/useTimeFormat";
+import { ThemeColorType } from "@/types/color";
 
 export interface SettingState {
-  /** Schema 版本号（可选，用于数据迁移） */
+  /** Schema 版本号 */
   schemaVersion?: number;
   /** 明暗模式 */
   themeMode: "light" | "dark" | "auto";
   /** 主题类别 */
-  themeColorType:
-    | "default"
-    | "orange"
-    | "blue"
-    | "pink"
-    | "brown"
-    | "indigo"
-    | "green"
-    | "purple"
-    | "yellow"
-    | "teal"
-    | "custom";
+  themeColorType: ThemeColorType;
+  /** 偏好繁体中文 */
+  preferTraditionalChinese: boolean;
+  /** 繁体中文变体 */
+  traditionalChineseVariant: "s2t" | "s2tw" | "s2hk" | "s2twp";
   /** 主题自定义颜色 */
   themeCustomColor: string;
   /** 全局着色 */
   themeGlobalColor: boolean;
+  /** 主题变体 */
+  themeVariant: "primary" | "secondary" | "tertiary" | "neutral" | "neutralVariant" | "error";
   /** 主题跟随封面 */
   themeFollowCover: boolean;
+  /** 字体设置样式 */
+  fontSettingStyle: "single" | "multi" | "custom";
   /** 全局字体 */
   globalFont: "default" | string;
   /** 歌词区域字体 */
@@ -57,20 +55,34 @@ export interface SettingState {
   lyricTranFontSize: number;
   /** 歌词音译字体大小 */
   lyricRomaFontSize: number;
-  /** 歌词字体加粗 */
-  lyricFontBold: boolean;
+  /** 歌词字重设置 */
+  lyricFontWeight: number;
   /** 显示逐字歌词 */
   showYrc: boolean;
-  /** 显示逐字歌词动画 */
-  showYrcAnimation: boolean;
   /** 显示歌词翻译 */
   showTran: boolean;
   /** 显示歌词音译 */
   showRoma: boolean;
+  /** 调换翻译与音译位置 */
+  swapTranRoma: boolean;
+  /** 显示逐字音译 */
+  showWordsRoma: boolean;
   /** 歌词位置 */
   lyricsPosition: "flex-start" | "center" | "flex-end";
-  /** 歌词滚动位置 */
-  lyricsScrollPosition: "start" | "center";
+  /** 歌词滚动位置偏移量 */
+  lyricsScrollOffset: number;
+  /** 歌词水平位置偏移量 */
+  lyricHorizontalOffset: number;
+  /** 歌词默认靠右（对唱互换） */
+  lyricAlignRight: boolean;
+  /** 隐藏歌词括号内容和别名 */
+  hideBracketedContent: boolean;
+  /** 替换歌词括号内容 */
+  replaceLyricBrackets: boolean;
+  /** 歌词括号替换预设 */
+  bracketReplacementPreset: "dash" | "angleBrackets" | "cornerBrackets" | "custom";
+  /** 自定义歌词括号替换内容 */
+  customBracketReplacement: string;
   /** 下载路径 */
   downloadPath: string;
   /** 是否启用缓存 */
@@ -95,6 +107,16 @@ export interface SettingState {
   usePlaybackForDownload: boolean;
   /** 保存元信息文件 */
   saveMetaFile: boolean;
+  /** 使用解锁接口下载 */
+  useUnlockForDownload: boolean;
+  /** 内嵌暂逐字歌词 (beta) */
+  downloadMakeYrc: boolean;
+  /** 下载后另存为 ASS 格式 */
+  downloadSaveAsAss: boolean;
+  /** 下载歌词转繁体 */
+  downloadLyricToTraditional: boolean;
+  /** 下载歌词文件编码 */
+  downloadLyricEncoding: "utf-8" | "gbk" | "utf-16" | "iso-8859-1";
   /** 默认下载音质（弹窗默认选项） */
   downloadSongLevel: SongLevelType;
   /** 代理协议 */
@@ -115,6 +137,8 @@ export interface SettingState {
     | "jymaster";
   /** 播放设备 */
   playDevice: "default" | string;
+  /** 音频引擎: element (原生) 或 ffmpeg */
+  audioEngine: "element" | "ffmpeg";
   /** 自动播放 */
   autoPlay: boolean;
   /** 预载下一首 */
@@ -123,6 +147,10 @@ export interface SettingState {
   songVolumeFade: boolean;
   /** 渐入渐出时间 */
   songVolumeFadeTime: number;
+  /** 是否启用 ReplayGain (音量平衡) */
+  enableReplayGain: boolean;
+  /** ReplayGain 模式: 轨道增益 (track) 或 专辑增益 (album) */
+  replayGainMode: "track" | "album";
   /** 是否使用解灰 */
   useSongUnlock: boolean;
   /** 歌曲解锁音源 */
@@ -134,7 +162,7 @@ export interface SettingState {
   /** 时间显示格式 **/
   timeFormat: TimeFormat;
   /** 播放器类型 */
-  playerType: "cover" | "record";
+  playerType: "cover" | "record" | "fullscreen";
   /** 背景类型 */
   playerBackgroundType: "none" | "animation" | "blur" | "color";
   /** 背景动画帧率 */
@@ -143,6 +171,10 @@ export interface SettingState {
   playerBackgroundFlowSpeed: number;
   /** 背景动画是否在歌曲暂停时暂停 */
   playerBackgroundPause: boolean;
+  /** 背景动画是否响应低频音量 */
+  playerBackgroundLowFreqVolume: boolean;
+  /** 背景动画渲染比例 */
+  playerBackgroundRenderScale: number;
   /** 播放器元素自动隐藏 */
   autoHidePlayerMeta: boolean;
   /** 记忆最后进度 */
@@ -155,14 +187,10 @@ export interface SettingState {
   showPlaylistCount: boolean;
   /** 是否显示音乐频谱 */
   showSpectrums: boolean;
-  /** 是否开启 SMTC */
+  /** 是否开启系统音频集成 */
   smtcOpen: boolean;
-  /** 是否开启原生 SMTC 支持 (Windows) */
-  enableNativeSmtc: boolean;
   /** 歌词模糊 */
   lyricsBlur: boolean;
-  /** 鼠标悬停暂停 */
-  lrcMousePause: boolean;
   /** 播放试听 */
   playSongDemo: boolean;
   /** 显示搜索历史 */
@@ -177,8 +205,12 @@ export interface SettingState {
   wordFadeWidth: number;
   /** 歌词时延调节步长（毫秒） */
   lyricOffsetStep: number;
-  /** 是否启用在线 TTML 歌词 */
+  /** 启用在线 TTML 歌词 */
   enableOnlineTTMLLyric: boolean;
+  /** 优先使用 QQ 音乐歌词源 */
+  preferQQMusicLyric: boolean;
+  /** 本地歌曲使用 QQ 音乐歌词匹配 */
+  localLyricQQMusicMatch: boolean;
   /** AMLL DB 服务地址 */
   amllDbServer: string;
   /** 菜单显示封面 */
@@ -195,10 +227,43 @@ export interface SettingState {
   localSeparators: string[];
   /** 显示本地封面 */
   showLocalCover: boolean;
+  /** 封面显示配置 */
+  hiddenCovers: {
+    /** 为我推荐 */
+    home: boolean;
+    /** 歌单广场 */
+    playlist: boolean;
+    /** 排行榜 */
+    toplist: boolean;
+    /** 歌手 */
+    artist: boolean;
+    /** 最新音乐 */
+    new: boolean;
+    /** 播放器 */
+    player: boolean;
+    /** 歌单详情/歌曲列表 */
+    list: boolean;
+    /** 私人FM */
+    personalFM: boolean;
+    /** 歌手详情 */
+    artistDetail: boolean;
+    /** 播客电台 */
+    radio: boolean;
+    /** 我的收藏 */
+    like: boolean;
+    /** 视频 */
+    video: boolean;
+    /** 视频详情页 */
+    videoDetail: boolean;
+  };
+  /** 隐藏全部封面 */
+  hideAllCovers: boolean;
+  /** 隐藏迷你播放器封面 */
+  hideMiniPlayerCover: boolean;
   /** 路由动画 */
-  routeAnimation: "none" | "fade" | "zoom" | "slide" | "up";
+  routeAnimation: "none" | "fade" | "zoom" | "slide" | "up" | "flow" | "mask-left" | "mask-top";
   /** 播放器展开动画 */
-  playerExpandAnimation: "up" | "smooth";
+  playerExpandAnimation: "up" | "flow";
   /** 是否使用真实 IP */
   useRealIP: boolean;
   /** 真实 IP 地址 */
@@ -212,13 +277,19 @@ export interface SettingState {
   /** 是否启用排除歌词 */
   enableExcludeLyrics: boolean;
   /** 「排除歌词」是否适用于 TTML */
-  enableExcludeTTML: boolean;
+  enableExcludeLyricsTTML: boolean;
   /** 「排除歌词」是否适用于本地歌词 */
-  enableExcludeLocalLyrics: boolean;
+  enableExcludeLyricsLocal: boolean;
   /** 用户自定义的排除歌词关键字 */
-  excludeUserKeywords: string[];
+  excludeLyricsUserKeywords: string[];
   /** 用户自定义的排除歌词正则表达式 */
-  excludeUserRegexes: string[];
+  excludeLyricsUserRegexes: string[];
+  /** 是否启用评论排除 */
+  enableExcludeComments: boolean;
+  /** 排除评论关键词 */
+  excludeCommentKeywords: string[];
+  /** 排除评论正则表达式 */
+  excludeCommentRegexes: string[];
   /** 显示默认本地路径 */
   showDefaultLocalPath: boolean;
   /** 本地文件夹显示模式 */
@@ -227,10 +298,22 @@ export interface SettingState {
   showPlayMeta: boolean;
   /** 显示歌曲音质 */
   showSongQuality: boolean;
+  /** 显示播放器歌曲音质 */
+  showPlayerQuality: boolean;
   /** 显示歌曲特权标签 */
   showSongPrivilegeTag: boolean;
+  /** 显示歌曲脏标 */
+  showSongExplicitTag: boolean;
   /** 显示原唱翻唱标签 */
   showSongOriginalTag: boolean;
+  /** 显示歌曲专辑 */
+  showSongAlbum: boolean;
+  /** 显示歌曲时长 */
+  showSongDuration: boolean;
+  /** 显示歌曲操作 */
+  showSongOperations: boolean;
+  /** 显示歌曲歌手 */
+  showSongArtist: boolean;
   /** 侧边栏隐藏 */
   sidebarHide: {
     /** 隐藏发现音乐 */
@@ -256,10 +339,50 @@ export interface SettingState {
     /** 隐藏心动模式 */
     hideHeartbeatMode: boolean;
   };
+  /** 歌单界面元素显示配置 */
+  // Controls the visibility of elements on the playlist detail page
+  playlistPageElements: {
+    tags: boolean;
+    creator: boolean;
+    time: boolean;
+    description: boolean;
+  };
+  /** 全屏播放器界面元素显示配置 */
+  fullscreenPlayerElements: {
+    like: boolean;
+    addToPlaylist: boolean;
+    download: boolean;
+    comments: boolean;
+    desktopLyric: boolean;
+    moreSettings: boolean;
+    copyLyric: boolean;
+    lyricOffset: boolean;
+    lyricSettings: boolean;
+  };
+  /** 右键菜单显示配置 */
+  contextMenuOptions: {
+    play: boolean;
+    playNext: boolean;
+    addToPlaylist: boolean;
+    mv: boolean;
+    dislike: boolean;
+    more: boolean;
+    cloudImport: boolean;
+    deleteFromPlaylist: boolean;
+    deleteFromCloud: boolean;
+    deleteFromLocal: boolean;
+    openFolder: boolean;
+    cloudMatch: boolean;
+    wiki: boolean;
+    search: boolean;
+    download: boolean;
+  };
   /** 启用搜索关键词获取 */
   enableSearchKeyword: boolean;
   /** 失焦后自动清空搜索框 */
   clearSearchOnBlur: boolean;
+  /** 显示主页问好 */
+  showHomeGreeting: boolean;
   /** 首页栏目顺序和显示配置 */
   homePageSections: Array<{
     key: "playlist" | "radar" | "artist" | "video" | "radio" | "album";
@@ -287,8 +410,6 @@ export interface SettingState {
   playerFollowCoverColor: boolean;
   /** 进度条悬浮时显示歌词 */
   progressLyricShow: boolean;
-  /** 是否使用自定义字体输入 */
-  useCustomFont: boolean;
   /** Discord RPC 配置 */
   discordRpc: {
     /** 是否启用 Discord RPC */
@@ -296,8 +417,24 @@ export interface SettingState {
     /** 暂停时显示 */
     showWhenPaused: boolean;
     /** 显示模式 */
-    displayMode: "name" | "state" | "details";
+    displayMode: "Name" | "State" | "Details";
   };
+  /** 播放引擎 */
+  playbackEngine: "web-audio" | "mpv";
+  /** 自定义 CSS */
+  customCss: string;
+  /** 自定义 JS */
+  customJs: string;
+  /** 播放器封面/歌词占比 (0-100) */
+  playerStyleRatio: number;
+  /** 全屏封面渐变位置 (0-100) */
+  playerFullscreenGradient: number;
+  /** 是否启用流媒体功能 */
+  streamingEnabled: boolean;
+  /** Fuck AI: 开启后在所有的地方都不显示 Hi-res 以上的音质选项 */
+  disableAiAudio: boolean;
+  /** Fuck DJ: 开启后自动跳过 DJ 歌曲 */
+  disableDjMode: boolean;
 }
 
 export const useSettingStore = defineStore("setting", {
@@ -305,9 +442,13 @@ export const useSettingStore = defineStore("setting", {
     schemaVersion: 0,
     themeMode: "auto",
     themeColorType: "default",
+    preferTraditionalChinese: false,
+    traditionalChineseVariant: "s2t",
     themeCustomColor: "#fe7971",
     themeFollowCover: false,
     themeGlobalColor: false,
+    themeVariant: "secondary",
+    fontSettingStyle: "single",
     globalFont: "default",
     LyricFont: "follow",
     japaneseLyricFont: "follow",
@@ -328,10 +469,13 @@ export const useSettingStore = defineStore("setting", {
     useKeepAlive: true,
     songLevel: "exhigh",
     playDevice: "default",
+    audioEngine: "element",
     autoPlay: false,
     useNextPrefetch: true,
     songVolumeFade: true,
     songVolumeFadeTime: 300,
+    enableReplayGain: false,
+    replayGainMode: "track",
     useSongUnlock: true,
     songUnlockServer: [
       { key: SongUnlockServer.BODIAN, enabled: true },
@@ -347,6 +491,8 @@ export const useSettingStore = defineStore("setting", {
     playerBackgroundFps: 30,
     playerBackgroundFlowSpeed: 4,
     playerBackgroundPause: false,
+    playerBackgroundLowFreqVolume: false,
+    playerBackgroundRenderScale: 0.5,
     autoHidePlayerMeta: true,
     memoryLastSeek: true,
     progressTooltipShow: true,
@@ -354,40 +500,67 @@ export const useSettingStore = defineStore("setting", {
     showPlaylistCount: true,
     showSpectrums: false,
     smtcOpen: true,
-    enableNativeSmtc: true,
     playSongDemo: false,
     scrobbleSong: false,
     dynamicCover: false,
     lyricFontSize: 46,
     lyricTranFontSize: 22,
     lyricRomaFontSize: 18,
-    lyricFontBold: true,
+    lyricFontWeight: 700,
     useAMLyrics: false,
     useAMSpring: false,
     hidePassedLines: false,
     wordFadeWidth: 0.5,
     lyricOffsetStep: 500,
     enableOnlineTTMLLyric: false,
+    preferQQMusicLyric: false,
+    localLyricQQMusicMatch: false,
     amllDbServer: defaultAMLLDbServer,
     showYrc: true,
-    showYrcAnimation: true,
     showTran: true,
     showRoma: true,
+    swapTranRoma: false,
+    showWordsRoma: true,
     lyricsPosition: "flex-start",
     lyricsBlur: false,
-    lyricsScrollPosition: "start",
-    lrcMousePause: false,
+    lyricsScrollOffset: 0.25,
+    lyricHorizontalOffset: 10,
+    lyricAlignRight: false,
+    hideBracketedContent: false,
+    replaceLyricBrackets: false,
+    bracketReplacementPreset: "dash",
+    customBracketReplacement: "-",
     enableExcludeLyrics: true,
-    enableExcludeTTML: false,
-    enableExcludeLocalLyrics: false,
-    excludeUserKeywords: [],
-    excludeUserRegexes: [],
+    enableExcludeLyricsTTML: false,
+    enableExcludeLyricsLocal: false,
+    excludeLyricsUserKeywords: [],
+    excludeLyricsUserRegexes: [],
+    enableExcludeComments: false,
+    excludeCommentKeywords: [],
+    excludeCommentRegexes: [],
     localFilesPath: [],
     localLyricPath: [],
     showDefaultLocalPath: true,
     localFolderDisplayMode: "tab",
     localSeparators: ["/", "&"],
     showLocalCover: true,
+    hiddenCovers: {
+      home: false,
+      playlist: false,
+      toplist: false,
+      artist: false,
+      new: false,
+      player: false,
+      list: false,
+      personalFM: false,
+      artistDetail: false,
+      radio: false,
+      like: false,
+      video: false,
+      videoDetail: false,
+    },
+    hideAllCovers: false,
+    hideMiniPlayerCover: false,
     downloadPath: "",
     cacheEnabled: true,
     songCacheEnabled: true,
@@ -399,6 +572,11 @@ export const useSettingStore = defineStore("setting", {
     downloadLyricTranslation: true,
     downloadLyricRomaji: false,
     usePlaybackForDownload: false,
+    useUnlockForDownload: false,
+    downloadMakeYrc: false,
+    downloadSaveAsAss: false,
+    downloadLyricToTraditional: false,
+    downloadLyricEncoding: "utf-8",
     saveMetaFile: false,
     downloadSongLevel: "h",
     proxyProtocol: "off",
@@ -408,8 +586,14 @@ export const useSettingStore = defineStore("setting", {
     realIP: "",
     showPlayMeta: true,
     showSongQuality: true,
+    showPlayerQuality: true,
     showSongPrivilegeTag: true,
+    showSongExplicitTag: true,
     showSongOriginalTag: true,
+    showSongAlbum: true,
+    showSongDuration: true,
+    showSongOperations: true,
+    showSongArtist: true,
     sidebarHide: {
       hideDiscover: false,
       hidePersonalFM: false,
@@ -423,8 +607,43 @@ export const useSettingStore = defineStore("setting", {
       hideLikedPlaylists: false,
       hideHeartbeatMode: false,
     },
+    playlistPageElements: {
+      tags: true,
+      creator: true,
+      time: true,
+      description: true,
+    },
+    fullscreenPlayerElements: {
+      like: true,
+      addToPlaylist: true,
+      download: true,
+      comments: true,
+      desktopLyric: true,
+      moreSettings: true,
+      copyLyric: true,
+      lyricOffset: true,
+      lyricSettings: true,
+    },
+    contextMenuOptions: {
+      play: true,
+      playNext: true,
+      addToPlaylist: true,
+      mv: true,
+      dislike: true,
+      more: true,
+      cloudImport: true,
+      deleteFromPlaylist: true,
+      deleteFromCloud: true,
+      deleteFromLocal: true,
+      openFolder: true,
+      cloudMatch: true,
+      wiki: true,
+      search: true,
+      download: true,
+    },
     enableSearchKeyword: true,
     clearSearchOnBlur: false,
+    showHomeGreeting: true,
     homePageSections: [
       { key: "playlist", name: "专属歌单", visible: true, order: 0 },
       { key: "radar", name: "雷达歌单", visible: true, order: 1 },
@@ -448,12 +667,19 @@ export const useSettingStore = defineStore("setting", {
     },
     playerFollowCoverColor: true,
     progressLyricShow: true,
-    useCustomFont: false,
     discordRpc: {
       enabled: false,
       showWhenPaused: true,
-      displayMode: "name",
+      displayMode: "Name",
     },
+    playbackEngine: "web-audio",
+    customCss: "",
+    customJs: "",
+    playerStyleRatio: 50,
+    playerFullscreenGradient: 15,
+    streamingEnabled: false,
+    disableAiAudio: false,
+    disableDjMode: false,
   }),
   getters: {
     /**

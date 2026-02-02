@@ -7,7 +7,7 @@
     :class="{ cover: settingStore.menuShowCover }"
     :indent="0"
     :root-indent="26"
-    :collapsed="statusStore.menuCollapsed"
+    :collapsed="statusStore.menuCollapsed && isDesktop"
     :collapsed-width="64"
     :collapsed-icon-size="22"
     :options="menuOptions"
@@ -17,8 +17,16 @@
 </template>
 
 <script setup lang="ts">
+import { useMobile } from "@/composables/useMobile";
 import { usePlayerController } from "@/core/player/PlayerController";
-import { useDataStore, useMusicStore, useSettingStore, useStatusStore } from "@/stores";
+import { useSongManager } from "@/core/player/SongManager";
+import {
+  useDataStore,
+  useLocalStore,
+  useMusicStore,
+  useSettingStore,
+  useStatusStore,
+} from "@/stores";
 import type { CoverType } from "@/types/main";
 import { isLogin } from "@/utils/auth";
 import { isElectron } from "@/utils/env";
@@ -34,19 +42,37 @@ import {
   NButton,
   NEllipsis,
   NText,
+  NPopselect,
 } from "naive-ui";
 import { RouterLink, useRouter } from "vue-router";
 
+const emit = defineEmits<{ (e: "menu-click", key: string): void }>();
+
 const router = useRouter();
 const dataStore = useDataStore();
+const localStore = useLocalStore();
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();
 const settingStore = useSettingStore();
 const player = usePlayerController();
+const songManager = useSongManager();
+
+const { isDesktop } = useMobile();
 
 // 菜单数据
 const menuRef = ref<MenuInst | null>(null);
 const menuActiveKey = ref<string | number>((router.currentRoute.value.name as string) || "home");
+const playlistMode = ref<"online" | "local">("online");
+
+// 刷新私人漫游
+const handleRefreshFM = async (e: Event) => {
+  e.stopPropagation();
+  await songManager.refreshPersonalFM();
+  // 刷新后如果处于私人漫游模式，则重新播放
+  if (statusStore.personalFmMode && musicStore.personalFMSong?.id) {
+    player.playSong();
+  }
+};
 
 // 菜单内容
 const menuOptions = computed<MenuOption[] | MenuGroupOption[]>(() => {
@@ -75,7 +101,18 @@ const menuOptions = computed<MenuOption[] | MenuGroupOption[]>(() => {
         },
         {
           key: "personal-fm",
-          label: "私人漫游",
+          label: () =>
+            h("div", { class: "user-liked roaming-label" }, [
+              h(NText, null, () => "私人漫游"),
+              h(NButton, {
+                type: "tertiary",
+                round: true,
+                strong: true,
+                secondary: true,
+                renderIcon: renderIcon("Refresh"),
+                onClick: handleRefreshFM,
+              }),
+            ]),
           show: isLogin() !== 0 && !settingStore.sidebarHide.hidePersonalFM,
           icon: renderIcon("Radio", {
             style: {
@@ -149,6 +186,13 @@ const menuOptions = computed<MenuOption[] | MenuGroupOption[]>(() => {
           icon: renderIcon("Download"),
         },
         {
+          key: "streaming",
+          link: "streaming",
+          label: "流媒体",
+          show: settingStore.streamingEnabled,
+          icon: renderIcon("Stream"),
+        },
+        {
           key: "local",
           link: "local",
           label: "本地歌曲",
@@ -166,14 +210,38 @@ const menuOptions = computed<MenuOption[] | MenuGroupOption[]>(() => {
           key: "divider-two",
           type: "divider",
         },
-        // 创建的歌单
         {
           key: "user-playlists",
           show: !settingStore.sidebarHide.hideUserPlaylists,
           icon: statusStore.menuCollapsed ? renderIcon("PlaylistAdd") : undefined,
           label: () =>
             h("div", { class: "user-list" }, [
-              h(NText, { depth: 3 }, () => ["创建的歌单"]),
+              h(NText, { depth: 3 }, () =>
+                playlistMode.value === "online" ? "创建的歌单" : "本地歌单",
+              ),
+              h(
+                NPopselect,
+                {
+                  options: [
+                    { label: "在线歌单", value: "online" },
+                    { label: "本地歌单", value: "local" },
+                  ],
+                  value: playlistMode.value,
+                  trigger: "click",
+                  onUpdateValue: (value: "online" | "local") => {
+                    playlistMode.value = value;
+                  },
+                },
+                () =>
+                  h(NButton, {
+                    type: "tertiary",
+                    round: true,
+                    strong: true,
+                    secondary: true,
+                    renderIcon: renderIcon("Menu"),
+                    onClick: (e: Event) => e.stopPropagation(),
+                  }),
+              ),
               h(NButton, {
                 type: "tertiary",
                 round: true,
@@ -182,11 +250,14 @@ const menuOptions = computed<MenuOption[] | MenuGroupOption[]>(() => {
                 renderIcon: renderIcon("Add"),
                 onclick: (event: Event) => {
                   event.stopPropagation();
-                  openCreatePlaylist();
+                  openCreatePlaylist(playlistMode.value === "local");
                 },
               }),
             ]),
-          children: [...createPlaylist.value],
+          children:
+            playlistMode.value === "online"
+              ? [...createPlaylist.value]
+              : [...localPlaylistMenu.value],
         },
         // 收藏的歌单
         {
@@ -206,9 +277,54 @@ const menuOptions = computed<MenuOption[] | MenuGroupOption[]>(() => {
         {
           key: "local",
           link: "local",
-          label: "本地歌曲",
+          label: "音乐库",
           show: isElectron,
           icon: renderIcon("FolderMusic"),
+        },
+        {
+          key: "local-albums",
+          link: "local-albums",
+          label: "专辑",
+          show:
+            isElectron &&
+            (localStore.localSongs?.length > 0 || settingStore.localFilesPath?.length > 0),
+          icon: renderIcon("Album"),
+        },
+        {
+          key: "local-artists",
+          link: "local-artists",
+          label: "艺术家",
+          show:
+            isElectron &&
+            (localStore.localSongs?.length > 0 || settingStore.localFilesPath?.length > 0),
+          icon: renderIcon("Person"),
+        },
+        {
+          key: "divider",
+          type: "divider",
+          show: localPlaylistMenu.value.length > 0,
+        },
+        // 本地歌单
+        {
+          key: "local-playlists",
+          show: localPlaylistMenu.value.length > 0,
+          icon: statusStore.menuCollapsed ? renderIcon("PlaylistAdd") : undefined,
+          label: () =>
+            h("div", { class: "user-list" }, [
+              h(NText, { depth: 3 }, () => "本地歌单"),
+              h(NButton, {
+                type: "tertiary",
+                round: true,
+                strong: true,
+                secondary: true,
+                renderIcon: renderIcon("Add"),
+                onclick: (event: Event) => {
+                  event.stopPropagation();
+                  openCreatePlaylist(true);
+                },
+              }),
+            ]),
+          children: [...localPlaylistMenu.value],
         },
       ];
 });
@@ -249,6 +365,27 @@ const likedPlaylist = computed<MenuOption[]>(() => {
   return renderPlaylist(list, settingStore.menuShowCover);
 });
 
+// 本地歌单菜单
+const localPlaylistMenu = computed<MenuOption[]>(() => {
+  const playlists = localStore.localPlaylists;
+  if (!playlists || playlists.length === 0) return [];
+  return playlists.map((playlist) => ({
+    key: `local-${playlist.id}`,
+    label: () =>
+      settingStore.menuShowCover
+        ? h("div", { class: "pl-cover" }, [
+            h(NAvatar, {
+              src: playlist.cover || "/images/album.jpg?asset",
+              fallbackSrc: "/images/album.jpg?asset",
+              lazy: true,
+            }),
+            h(NEllipsis, null, () => playlist.name),
+          ])
+        : h(NEllipsis, null, () => playlist.name),
+    icon: settingStore.menuShowCover ? undefined : renderIcon("PlayList"),
+  }));
+});
+
 // 渲染菜单路由
 const renderMenuLabel = (option: MenuOption) => {
   // 路由链接
@@ -260,6 +397,7 @@ const renderMenuLabel = (option: MenuOption) => {
 
 // 菜单项更改
 const menuUpdate = (key: string, item: MenuOption) => {
+  emit("menu-click", key);
   // 私人漫游
   if (key === "personal-fm") {
     if (!musicStore.personalFMSong?.id) {
@@ -283,6 +421,16 @@ const menuUpdate = (key: string, item: MenuOption) => {
       name: "playlist",
       query: { id: item.key },
     });
+  } else if (typeof key === "string" && key.startsWith("local-")) {
+    // 检查是否为本地歌单（16位数字ID）
+    const localId = key.replace("local-", "");
+    const isLocalPlaylist = /^\d{16}$/.test(localId);
+    if (isLocalPlaylist) {
+      router.push({
+        name: "playlist",
+        query: { id: localId },
+      });
+    }
   } else {
     switch (key) {
       case "like-songs":
@@ -313,11 +461,14 @@ const checkMenuItem = () => {
   // 处理路由名称
   const prefixMap = [
     { prefix: "discover-", name: "discover" },
-    { prefix: "local-", name: "local" },
+    // 本地模式下不合并 local- 前缀的路由
+    { prefix: "local-", name: "local", skipInLocalMode: true },
     { prefix: "like-", name: "like", exclude: "like-songs" },
     { prefix: "download-", name: "download" },
+    { prefix: "streaming-", name: "streaming" },
   ];
   for (const item of prefixMap) {
+    if (item.skipInLocalMode && !settingStore.useOnlineService) continue;
     if (routerName.startsWith(item.prefix) && (!item.exclude || routerName !== item.exclude)) {
       routerName = item.name;
       break;
@@ -325,6 +476,12 @@ const checkMenuItem = () => {
   }
   // 显示菜单
   menuRef.value?.showOption(routerName);
+  // 本地模式下处理
+  if (!settingStore.useOnlineService) {
+    if (routerName === "local-songs" || routerName === "local-folders") {
+      routerName = "local";
+    }
+  }
   // 高亮菜单
   switch (routerName) {
     case "playlist": {
@@ -334,8 +491,18 @@ const checkMenuItem = () => {
       const isUserPlaylist = dataStore.userLikeData.playlists.some(
         (playlist) => playlist?.id === playlistId,
       );
-      if (playlistId) menuActiveKey.value = isUserPlaylist ? Number(playlistId) : "home";
-      menuRef.value?.showOption(playlistId);
+      // 是否为本地歌单
+      const isLocalPlaylist = playlistId.toString().length === 16;
+      if (!playlistId) menuActiveKey.value = "home";
+      if (isUserPlaylist) {
+        menuActiveKey.value = Number(playlistId);
+        menuRef.value?.showOption(playlistId);
+      } else if (isLocalPlaylist) {
+        menuActiveKey.value = `local-${playlistId}`;
+        menuRef.value?.showOption(`local-${playlistId}`);
+      } else {
+        menuActiveKey.value = "home";
+      }
       break;
     }
     default:
@@ -348,6 +515,15 @@ const checkMenuItem = () => {
 const openHeartMode = debounce(() => player.toggleShuffle("heartbeat"), 1000, {
   leading: true,
   trailing: false,
+});
+
+// 本地模式下自动展开本地歌单
+onMounted(() => {
+  if (!settingStore.useOnlineService && localPlaylistMenu.value.length > 0) {
+    if (!settingStore.menuExpandedKeys.includes("local-playlists")) {
+      settingStore.menuExpandedKeys.push("local-playlists");
+    }
+  }
 });
 
 // 监听路由
@@ -401,11 +577,11 @@ watch(
 .user-list {
   display: flex;
   align-items: center;
+  gap: 8px;
   .n-text {
     font-size: 0.93em;
   }
   .n-button {
-    margin-left: 12px;
     --n-height: 22px;
     --n-padding: 0 12px;
     --n-icon-size: 12px;
@@ -420,6 +596,19 @@ watch(
     min-width: 34px;
     margin-right: 12px;
     border-radius: 8px;
+  }
+}
+.roaming-label {
+  .n-button {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  &:hover {
+    .n-button {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
 }
 </style>

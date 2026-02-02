@@ -2,6 +2,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { createServer } from "net";
 import { socketLog } from "../logger";
 import { useStore } from "../store";
+import { getTrackInfoFromRenderer } from "../utils/track-info";
 import mainWindow from "../windows/main-window";
 
 /**
@@ -290,12 +291,34 @@ export class SocketService {
     // 根据消息类型进行处理
     if (messageObj.type === "control") {
       this.handleControlCommand(socket, messageObj.data as { command?: string });
+    } else if (messageObj.type === "get-song-info") {
+      this.handleGetSongInfo(socket);
     } else {
       // 未知的消息类型
       socketLog.warn(`⚠️ Unknown message type: ${messageObj.type}`);
       this.sendToClient(socket, {
         type: "error",
         data: { message: `未知的消息类型: ${messageObj.type}` },
+      });
+    }
+  }
+
+  /**
+   * 处理获取当前播放信息请求
+   * @param socket WebSocket 客户端连接
+   */
+  private async handleGetSongInfo(socket: WebSocket): Promise<void> {
+    try {
+      const trackInfo = await getTrackInfoFromRenderer();
+      this.sendToClient(socket, {
+        type: "song-info",
+        data: trackInfo,
+      });
+    } catch (error) {
+      socketLog.error("❌ Error getting current track info:", error);
+      this.sendToClient(socket, {
+        type: "error",
+        data: { message: "获取当前播放信息失败" },
       });
     }
   }

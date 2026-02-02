@@ -7,6 +7,7 @@ import type {
   CatType,
   LoginType,
   SongLevelType,
+  AccountType,
 } from "@/types/main";
 import { playlistCatlist } from "@/api/playlist";
 import { cloneDeep, isEmpty } from "lodash-es";
@@ -24,6 +25,7 @@ interface ListState {
   userLoginStatus: boolean;
   loginType: LoginType;
   userData: UserDataType;
+  userList: AccountType[];
   userLikeData: UserLikeDataType;
   likeSongsList: {
     detail: CoverType;
@@ -49,6 +51,8 @@ interface ListState {
     /** 总大小 */
     totalSize: string;
   }>;
+  /** 音频源偏好 memory cache */
+  audioSourcePreference: Record<string, string>;
 }
 
 type UserDataKeys = keyof ListState["userLikeData"];
@@ -65,6 +69,20 @@ const userDB = localforage.createInstance({
   name: "user-data",
   description: "User data of the application",
   storeName: "user",
+});
+
+// backgroundDB
+const backgroundDB = localforage.createInstance({
+  name: "background-data",
+  description: "Background image data",
+  storeName: "background",
+});
+
+// audioPrefDB
+const audioPrefDB = localforage.createInstance({
+  name: "music-data",
+  description: "Audio source preferences",
+  storeName: "audio_preferences",
 });
 
 export const useDataStore = defineStore("data", {
@@ -90,8 +108,11 @@ export const useDataStore = defineStore("data", {
       userId: 0,
       userType: 0,
       vipType: 0,
+
       name: "",
     },
+    // 用户列表（多账号）
+    userList: [],
     // 用户喜欢数据
     userLikeData: {
       songs: [],
@@ -118,6 +139,8 @@ export const useDataStore = defineStore("data", {
     },
     // 正在下载的歌曲列表
     downloadingSongs: [],
+    // 音频源偏好
+    audioSourcePreference: {},
   }),
   getters: {
     // 是否为喜欢歌曲
@@ -482,11 +505,87 @@ export const useDataStore = defineStore("data", {
         this.downloadingSongs = [...this.downloadingSongs];
       }
     },
+    /**
+     * 保存背景图
+     * @param blob 图片 Blob 数据
+     */
+    async saveBackgroundImage(blob: Blob): Promise<void> {
+      try {
+        await backgroundDB.setItem("image", blob);
+      } catch (error) {
+        console.error("Error saving background image:", error);
+        throw error;
+      }
+    },
+    /**
+     * 获取背景图
+     * @returns Blob 数据
+     */
+    async getBackgroundImage(): Promise<Blob | null> {
+      try {
+        const data = await backgroundDB.getItem<Blob>("image");
+        return data || null;
+      } catch (error) {
+        console.error("Error getting background image:", error);
+        return null;
+      }
+    },
+    /**
+     * 清除背景图
+     */
+    async clearBackgroundImage(): Promise<void> {
+      try {
+        await backgroundDB.removeItem("image");
+      } catch (error) {
+        console.error("Error clearing background image:", error);
+        throw error;
+      }
+    },
+    /**
+     * 获取音频源偏好
+     * @param id 歌曲ID
+     * @returns 音频源标识
+     */
+    async getAudioSourcePreference(id: number | string): Promise<string | null> {
+      // 优先从内存读取
+      const key = String(id);
+      if (this.audioSourcePreference[key]) {
+        return this.audioSourcePreference[key];
+      }
+      // 从 DB 读取并缓存到内存
+      try {
+        const val = await audioPrefDB.getItem<string>(key);
+        if (val) {
+          this.audioSourcePreference[key] = val;
+          return val;
+        }
+        return null;
+      } catch (error) {
+        console.error(`Error getting audio preference for ${id}:`, error);
+        return null;
+      }
+    },
+    /**
+     * 保存音频源偏好
+     * @param id 歌曲ID
+     * @param source 音频源标识
+     */
+    async setAudioSourcePreference(id: number | string, source: string): Promise<void> {
+      const key = String(id);
+      // 更新内存
+      this.audioSourcePreference[key] = source;
+      // 更新 DB
+      try {
+        await audioPrefDB.setItem(key, source);
+      } catch (error) {
+        console.error(`Error setting audio preference for ${id}:`, error);
+      }
+    },
   },
   // 持久化
   persist: {
     key: "data-store",
     storage: localStorage,
-    pick: ["userLoginStatus", "loginType", "userData", "searchHistory", "catData"],
+    pick: ["userLoginStatus", "loginType", "userData", "userList", "searchHistory", "catData"],
   },
 });

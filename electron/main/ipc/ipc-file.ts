@@ -156,6 +156,12 @@ const initFileIpc = (): void => {
               size: (size / (1024 * 1024)).toFixed(2),
               path: fullPath,
               quality: format.bitrate ?? 0,
+              replayGain: {
+                trackGain: common.replaygain_track_gain?.ratio,
+                trackPeak: common.replaygain_track_peak?.ratio,
+                albumGain: common.replaygain_album_gain?.ratio,
+                albumPeak: common.replaygain_album_peak?.ratio,
+              },
             };
           } catch (err) {
             ipcLog.warn(`⚠️ Failed to parse file: ${fullPath}`, err);
@@ -193,6 +199,12 @@ const initFileIpc = (): void => {
         format,
         // md5
         md5: await getFileMD5(filePath),
+        replayGain: {
+          trackGain: common.replaygain_track_gain?.ratio,
+          trackPeak: common.replaygain_track_peak?.ratio,
+          albumGain: common.replaygain_album_gain?.ratio,
+          albumPeak: common.replaygain_album_peak?.ratio,
+        },
       };
     } catch (error) {
       ipcLog.error("❌ Error fetching music metadata:", error);
@@ -240,7 +252,9 @@ const initFileIpc = (): void => {
       musicPath: string, // 参数名改为 musicPath 以示区分
     ): Promise<{
       lyric: string;
-      format: "lrc" | "ttml";
+      format: "lrc" | "ttml" | "yrc";
+      external?: { lyric: string; format: "lrc" | "ttml" | "yrc" };
+      embedded?: { lyric: string; format: "lrc" };
     }> => {
       try {
         // 获取文件基本信息
@@ -256,8 +270,12 @@ const initFileIpc = (): void => {
           ipcLog.error("❌ Failed to read directory:", dir);
           throw error;
         }
-        // 遍历优先级
-        for (const format of ["lrc", "ttml"] as const) {
+
+        let external: { lyric: string; format: "lrc" | "ttml" | "yrc" } | undefined;
+        let embedded: { lyric: string; format: "lrc" } | undefined;
+
+        // 1. 查找外部歌词文件 (遍历优先级)
+        for (const format of ["ttml", "yrc", "lrc"] as const) {
           // 构造期望目标文件名
           const targetNameLower = `${baseName}.${format}`.toLowerCase();
           // 在文件列表中查找是否存在匹配项（忽略大小写）
@@ -269,7 +287,8 @@ const initFileIpc = (): void => {
               // 若不为空
               if (lyric && lyric.trim() !== "") {
                 ipcLog.info(`✅ Local lyric found (${format}): ${lyricPath}`);
-                return { lyric, format };
+                external = { lyric, format };
+                break; // 找到最高优先级的外部歌词后停止
               }
             } catch {
               // 读取失败则尝试下一种格式
@@ -277,22 +296,34 @@ const initFileIpc = (): void => {
             }
           }
         }
-        // 如果本地文件没找到，尝试读取内置元数据 (ID3 Tags)
-        const { common } = await parseFile(absPath);
-        const syncedLyric = common?.lyrics?.[0]?.syncText;
-        if (syncedLyric && syncedLyric.length > 0) {
-          return {
-            lyric: metaDataLyricsArrayToLrc(syncedLyric),
-            format: "lrc",
-          };
-        } else if (common?.lyrics?.[0]?.text) {
-          return {
-            lyric: common?.lyrics?.[0]?.text,
-            format: "lrc",
-          };
+
+        // 2. 读取内置元数据 (ID3 Tags)
+        try {
+          const { common } = await parseFile(absPath);
+          const syncedLyric = common?.lyrics?.[0]?.syncText;
+          if (syncedLyric && syncedLyric.length > 0) {
+            embedded = {
+              lyric: metaDataLyricsArrayToLrc(syncedLyric),
+              format: "lrc",
+            };
+          } else if (common?.lyrics?.[0]?.text) {
+            embedded = {
+              lyric: common?.lyrics?.[0]?.text,
+              format: "lrc",
+            };
+          }
+        } catch (e) {
+          ipcLog.warn(`⚠️ Failed to parse metadata for lyrics: ${absPath}`, e);
         }
-        // 都没有找到
-        return { lyric: "", format: "lrc" };
+
+        // 3. 确定主要返回结果 (优先使用外部歌词，兼容旧逻辑)
+        const main = external || embedded || { lyric: "", format: "lrc" as const };
+
+        return {
+          ...main,
+          external,
+          embedded,
+        };
       } catch (error) {
         ipcLog.error("❌ Error fetching music lyric:", error);
         throw error;
@@ -636,9 +667,26 @@ const initFileIpc = (): void => {
         Id3v2Settings.defaultVersion = 3;
 
         songFile.tag.title = songData?.name || "未知曲目";
-        songFile.tag.album = songData?.album?.name || "未知专辑";
-        songFile.tag.performers = songData?.artists?.map((ar: any) => ar.name) || ["未知艺术家"];
-        songFile.tag.albumArtists = songData?.artists?.map((ar: any) => ar.name) || ["未知艺术家"];
+        songFile.tag.album =
+          (typeof songData?.album === "string" ? songData.album : songData?.album?.name) || "未知专辑";
+        // 处理歌手信息（兼容字符串和数组格式）
+        const getArtistNames = (artists: any): string[] => {
+          if (Array.isArray(artists)) {
+            return artists
+              .map((ar: any) => (typeof ar === "string" ? ar : ar?.name || ""))
+              .filter((name) => name && name.trim().length > 0);
+          }
+          if (typeof artists === "string" && artists.trim().length > 0) {
+            return [artists];
+          }
+          return [];
+        };
+
+        const artistNames = getArtistNames(songData?.artists);
+        const finalArtists = artistNames.length > 0 ? artistNames : ["未知艺术家"];
+
+        songFile.tag.performers = finalArtists;
+        songFile.tag.albumArtists = finalArtists;
         if (lyric && downloadLyric) songFile.tag.lyrics = lyric;
         if (songCover && downloadCover) songFile.tag.pictures = [songCover];
         // 保存元信息
@@ -695,6 +743,52 @@ const initFileIpc = (): void => {
       return relativePath && !relativePath.startsWith("..") && !isAbsolute(relativePath);
     });
   });
+
+  // 保存文件内容 (用于保存文本文件等)
+  ipcMain.handle(
+    "save-file-content",
+    async (
+      _,
+      options: { path: string; fileName: string; content: string; encoding?: string },
+    ): Promise<{ success: boolean; message?: string }> => {
+      try {
+        const { path, fileName, content, encoding = "utf-8" } = options;
+        // 规范化路径
+        const dirPath = resolve(path);
+        // 检查文件夹是否存在，不存在则自动递归创建
+        try {
+          await access(dirPath);
+        } catch {
+          await mkdir(dirPath, { recursive: true });
+        }
+        const filePath = join(dirPath, fileName);
+
+        if (encoding !== "utf-8") {
+          try {
+            // 使用动态导入，避免启动时加载问题
+            const { encode } = await import("iconv-lite");
+            // iconv-lite support 'utf16' as alias for 'utf-16' etc.
+            const buffer = encode(content, encoding);
+            await writeFile(filePath, buffer);
+          } catch (e) {
+            ipcLog.error(`❌ ${encoding} encoding failed:`, e);
+            // Fallback to UTF-8 on error
+            await writeFile(filePath, content, "utf-8");
+          }
+        } else {
+          await writeFile(filePath, content, "utf-8");
+        }
+
+        return { success: true };
+      } catch (error) {
+        ipcLog.error("❌ Error saving file content:", error);
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    },
+  );
 };
 
 export default initFileIpc;
