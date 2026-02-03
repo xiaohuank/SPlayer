@@ -54,11 +54,15 @@ class PlayerController {
 
     // 监听设置变化以更新 ReplayGain
     settingStore.$subscribe((mutation) => {
-      if (
-        mutation.events &&
-        (mutation.events as any).key &&
-        ["enableReplayGain", "replayGainMode"].includes((mutation.events as any).key)
-      ) {
+      const events = Array.isArray(mutation.events) ? mutation.events : [mutation.events];
+      const shouldUpdate = events.some((event) => {
+        // 安全检查 event 是否为包含 key 的对象
+        if (!event || typeof event !== "object" || !("key" in event)) return false;
+        const key = (event as { key: string }).key;
+        return ["enableReplayGain", "replayGainMode"].includes(key);
+      });
+
+      if (shouldUpdate) {
         this.applyReplayGain();
       }
     });
@@ -195,7 +199,6 @@ class PlayerController {
       console.log(`🎧 [${playSongData.id}] 最终播放信息:`, audioSource);
       // 更新音质和解锁状态
       statusStore.songQuality = audioSource.quality;
-      statusStore.playUblock = audioSource.isUnlocked ?? false;
       statusStore.audioSource = audioSource.source;
       // 执行底层播放
       await this.loadAndPlay(audioSource.url, autoPlay, seek);
@@ -240,7 +243,6 @@ class PlayerController {
       console.log(`🔄 [${playSongData.id}] 切换音质:`, audioSource);
       // 更新音质和解锁状态
       statusStore.songQuality = audioSource.quality;
-      statusStore.playUblock = audioSource.isUnlocked ?? false;
       statusStore.audioSource = audioSource.source;
       // 停止当前播放
       audioManager.stop();
@@ -258,7 +260,6 @@ class PlayerController {
    * @param source 音频源标识
    */
   public async switchAudioSource(source: string) {
-    const dataStore = useDataStore();
     const statusStore = useStatusStore();
     const songManager = useSongManager();
     const musicStore = useMusicStore();
@@ -267,27 +268,19 @@ class PlayerController {
     if (!playSongData || playSongData.path) return;
     try {
       statusStore.playLoading = true;
-      // 保存偏好
-      await dataStore.setAudioSourcePreference(playSongData.id, source);
-      statusStore.preferredAudioSource = source;
       // 清除预取缓存
       songManager.clearPrefetch();
       // 获取新音频源
-      const audioSource = await songManager.getAudioSourceFromSpecificServer(playSongData, source);
-
+      const audioSource = await songManager.getAudioSource(playSongData, source);
       if (!audioSource.url) {
         window.$message.error("切换音频源失败：无法获取播放链接");
         statusStore.playLoading = false;
         return;
       }
-
       console.log(`🔄 [${playSongData.id}] 切换音频源:`, audioSource);
-
       // 更新状态
       statusStore.songQuality = audioSource.quality;
-      statusStore.playUblock = audioSource.isUnlocked ?? false;
       statusStore.audioSource = audioSource.source;
-
       // 保持当前进度和播放状态
       const seek = statusStore.currentTime;
       const shouldAutoPlay = statusStore.playStatus;

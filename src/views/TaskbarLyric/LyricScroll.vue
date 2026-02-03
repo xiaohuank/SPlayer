@@ -14,13 +14,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, type CSSProperties } from "vue";
+import { type CSSProperties } from "vue";
 
 const props = defineProps<{
   text: string;
   isActive: boolean;
   mode: "line" | "word";
   progress?: number;
+}>();
+
+const emit = defineEmits<{
+  (e: "resize-width", width: number): void;
 }>();
 
 const wrapperRef = ref<HTMLElement | null>(null);
@@ -62,7 +66,11 @@ const contentStyle = computed<CSSProperties>(() => {
 let resizeObserver: ResizeObserver | null = null;
 const updateMetrics = () => {
   if (wrapperRef.value) wrapperWidth.value = wrapperRef.value.clientWidth;
-  if (contentRef.value) contentWidth.value = contentRef.value.scrollWidth;
+  if (contentRef.value) {
+    const scrollWidth = contentRef.value.scrollWidth;
+    contentWidth.value = scrollWidth;
+    emit("resize-width", scrollWidth);
+  }
 };
 
 onMounted(() => {

@@ -11,15 +11,25 @@
             {{ packageJson.version }}
           </n-tag>
         </n-flex>
-        <n-button
-          :loading="statusStore.updateCheck"
-          type="primary"
-          strong
-          secondary
-          @click="checkUpdate"
-        >
-          {{ statusStore.updateCheck ? "检查更新中" : "检查更新" }}
-        </n-button>
+        <n-flex>
+          <n-button
+            :loading="statusStore.updateCheck"
+            type="primary"
+            strong
+            secondary
+            @click="checkUpdate"
+          >
+            {{ statusStore.updateCheck ? "检查更新中" : "检查更新" }}
+          </n-button>
+          <n-button
+            type="primary"
+            strong
+            secondary
+            @click="handleExportLog"
+          >
+            导出日志
+          </n-button>
+        </n-flex>
       </n-card>
       <n-collapse-transition :show="!!updateData">
         <n-card class="set-item update-data">
@@ -67,7 +77,13 @@
           @click="openLink(item.url)"
         >
           <n-flex align="center">
-            <n-avatar round :size="40" :src="item.avatar" fallback-src="/images/avatar.jpg?asset" />
+            <n-avatar
+              round
+              :size="40"
+              :src="item.avatar"
+              fallback-src="/images/avatar.jpg?asset"
+              :img-props="{ crossorigin: 'anonymous' }"
+            />
             <n-flex vertical :gap="4">
               <n-text class="name" strong> {{ item.name }} </n-text>
               <n-text class="tip" :depth="3" style="font-size: 12px">
@@ -96,6 +112,7 @@
                     :size="40"
                     :src="item.avatar"
                     fallback-src="/images/avatar.jpg?asset"
+                    :img-props="{ crossorigin: 'anonymous' }"
                   />
                   <n-flex vertical :gap="4">
                     <n-text class="name" strong> {{ item.name }} </n-text>
@@ -158,8 +175,17 @@ import { debounce } from "lodash-es";
 import { useStatusStore } from "@/stores";
 import { isElectron } from "@/utils/env";
 import packageJson from "@/../package.json";
+import { downloadWebLog } from "@/utils/log";
 
 const statusStore = useStatusStore();
+
+const handleExportLog = () => {
+  if (isElectron) {
+    void window.electron?.ipcRenderer?.invoke("save-log-file");
+  } else {
+    downloadWebLog("用户手动导出");
+  }
+};
 
 // 开发者模式点击次数
 const developerModeClickCount = ref(0);

@@ -1,18 +1,21 @@
+import defaultDesktopLyricConfig from "@/assets/data/lyricConfig";
+import { useLyricManager } from "@/core/player/LyricManager";
 import { usePlayerController } from "@/core/player/PlayerController";
 import { useSettingStore, useStatusStore } from "@/stores";
-import { LyricConfig } from "@/types/desktop-lyric";
+import type { LyricConfig } from "@/types/desktop-lyric";
+import type { SettingConfig } from "@/types/settings";
 import { isElectron, isWin } from "@/utils/env";
-import { openAMLLServer, openFontManager, openExcludeLyric } from "@/utils/modal";
-import { cloneDeep, isEqual } from "lodash-es";
-import defaultDesktopLyricConfig from "@/assets/data/lyricConfig";
-import { SettingConfig } from "@/types/settings";
-import LyricPreview from "../components/LyricPreview.vue";
 import { descMultiline } from "@/utils/format";
+import { openAMLLServer, openExcludeLyric, openFontManager } from "@/utils/modal";
+import { cloneDeep, isEqual } from "lodash-es";
+import { toRef } from "vue";
+import LyricPreview from "../components/LyricPreview.vue";
 
 export const useLyricSettings = (): SettingConfig => {
   const player = usePlayerController();
   const statusStore = useStatusStore();
   const settingStore = useSettingStore();
+  const lyricManager = useLyricManager();
 
   // 桌面歌词配置
   const desktopLyricConfig = reactive<LyricConfig>({ ...defaultDesktopLyricConfig });
@@ -234,20 +237,21 @@ export const useLyricSettings = (): SettingConfig => {
             }),
             children: [
               {
-                key: "preferQQMusicLyric",
-                label: "优先使用 QM 歌词",
+                key: "enableQQMusicLyric",
+                label: "启用 QM 歌词",
                 type: "switch",
-                description: "优先从 QM 获取逐字歌词，模糊搜索，可能不准确",
+                description: "启用从 QM 获取逐字歌词，模糊搜索，可能不准确",
                 show: isElectron,
                 value: computed({
-                  get: () => settingStore.preferQQMusicLyric,
-                  set: (v) => (settingStore.preferQQMusicLyric = v),
+                  get: () => settingStore.enableQQMusicLyric,
+                  set: (v) => (settingStore.enableQQMusicLyric = v),
                 }),
               },
               {
                 key: "localLyricQQMusicMatch",
                 label: "本地歌曲使用 QM 歌词",
                 type: "switch",
+                disabled: computed(() => !settingStore.enableQQMusicLyric),
                 description: "为本地歌曲从 QM 匹配逐字歌词，如已有 TTML 歌词则跳过",
                 show: isElectron,
                 value: computed({
@@ -319,6 +323,26 @@ export const useLyricSettings = (): SettingConfig => {
       {
         title: "歌词内容",
         items: [
+          {
+            key: "lyricPriority",
+            label: "歌词源优先级",
+            type: "select",
+            description: "设置歌词获取的优先顺序",
+            options: computed(() => {
+              const options = [{ label: "自动", value: "auto" }];
+              if (settingStore.enableQQMusicLyric) {
+                options.push({ label: "QM 优先", value: "qm" });
+              }
+              if (settingStore.enableOnlineTTMLLyric) {
+                options.push({ label: "TTML 优先", value: "ttml" });
+              }
+              return options;
+            }),
+            value: computed({
+              get: () => settingStore.lyricPriority,
+              set: (v) => lyricManager.switchLyricSource(v),
+            }),
+          },
           {
             key: "preferTraditionalChinese",
             label: "更喜欢繁体中文",
@@ -733,6 +757,97 @@ export const useLyricSettings = (): SettingConfig => {
                 player.setTaskbarLyricShow(v);
               },
             }),
+            children: [
+              {
+                key: "taskbarLyricShowWhenPaused",
+                label: "暂停时显示",
+                type: "switch",
+                description: "是否在暂停播放时显示任务栏歌词",
+                value: toRef(settingStore, "taskbarLyricShowWhenPaused"),
+              },
+              {
+                key: "taskbarLyricShowCover",
+                label: "显示封面",
+                type: "switch",
+                description: "是否在任务栏歌词中显示歌曲封面",
+                value: toRef(settingStore, "taskbarLyricShowCover"),
+              },
+              {
+                key: "taskbarLyricMaxWidth",
+                label: "最大宽度",
+                type: "slider",
+                description: "任务栏歌词的最大宽度占屏幕比例",
+                min: 10,
+                max: 100,
+                step: 1,
+                value: toRef(settingStore, "taskbarLyricMaxWidth"),
+                suffix: "%",
+              },
+              {
+                key: "taskbarLyricAutoShrink",
+                label: "自动收缩",
+                type: "switch",
+                description: "关闭后将固定占据设置的最大宽度",
+                value: computed({
+                  get: () => settingStore.taskbarLyricAutoShrink,
+                  set: (v) => {
+                    if (v) {
+                      window.$dialog.warning({
+                        title: "提示",
+                        content: "可能会导致右侧对齐的任务栏歌词异常抖动，是否开启？",
+                        positiveText: "开启",
+                        negativeText: "取消",
+                        onPositiveClick: () => {
+                          settingStore.taskbarLyricAutoShrink = true;
+                        },
+                      });
+                    } else {
+                      settingStore.taskbarLyricAutoShrink = false;
+                    }
+                  },
+                }),
+              },
+              {
+                key: "taskbarLyricPosition",
+                label: "显示位置",
+                type: "select",
+                description: "任务栏歌词的显示位置",
+                options: [
+                  { label: "自动", value: "automatic" },
+                  { label: "左侧", value: "left" },
+                  { label: "右侧", value: "right" },
+                ],
+                value: toRef(settingStore, "taskbarLyricPosition"),
+              },
+              {
+                key: "taskbarLyricAnimationMode",
+                label: "动画效果",
+                type: "select",
+                description: "任务栏歌词切换时的动画效果",
+                options: [
+                  { label: "滑动模糊", value: "slide-blur" },
+                  { label: "左侧滑入", value: "left-sm" },
+                ],
+                value: toRef(settingStore, "taskbarLyricAnimationMode"),
+              },
+              {
+                key: "taskbarLyricSingleLineMode",
+                label: "单行模式",
+                type: "switch",
+                description: "是否仅显示单行歌词（不显示下一句）",
+                value: toRef(settingStore, "taskbarLyricSingleLineMode"),
+              },
+              {
+                key: "taskbarLyricFontWeight",
+                label: "文字字重",
+                type: "input-number",
+                description: "设置任务栏歌词显示的字重",
+                min: 100,
+                max: 900,
+                step: 100,
+                value: toRef(settingStore, "taskbarLyricFontWeight"),
+              },
+            ],
           },
         ],
       },

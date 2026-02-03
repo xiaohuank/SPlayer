@@ -13,30 +13,30 @@ const initStoreIpc = (): void => {
 
   // 获取配置项
   ipcMain.handle("store-get", (_event, key: keyof StoreType) => {
-    return store.get(key as any);
+    return store.get(key);
   });
 
   // 设置配置项
   ipcMain.handle("store-set", (_event, key: keyof StoreType, value: unknown) => {
-    store.set(key as any, value as any);
+    store.set(key, value as StoreType[typeof key]);
     return true;
   });
 
   // 判断配置项是否存在
   ipcMain.handle("store-has", (_event, key: keyof StoreType) => {
-    return store.has(key as any);
+    return store.has(key);
   });
 
   // 删除配置项
   ipcMain.handle("store-delete", (_event, key: keyof StoreType) => {
-    store.delete(key as any);
+    store.delete(key);
     return true;
   });
 
   // 重置配置（支持指定 keys 或全部重置）
   ipcMain.handle("store-reset", (_event, keys?: (keyof StoreType)[]) => {
     if (keys && keys.length > 0) {
-      store.reset(...(keys as any));
+      store.reset(...keys);
     } else {
       store.reset();
     }
@@ -44,7 +44,7 @@ const initStoreIpc = (): void => {
   });
 
   // 导出配置
-  ipcMain.handle("store-export", async (_event, rendererData: any) => {
+  ipcMain.handle("store-export", async (_event, rendererData: unknown) => {
     console.log("[IPC] store-export called");
     try {
       const now = new Date();
@@ -102,20 +102,16 @@ const initStoreIpc = (): void => {
         } catch {
           return { success: false, error: "invalid_json" };
         }
-
         // 基础结构验证
         if (!settings || typeof settings !== "object") {
           return { success: false, error: "invalid_format" };
         }
-
         // 恢复 Electron Store 配置
         if (settings.electron) {
           try {
-            // 可以在这里过滤掉一些不想恢复的配置，比如 window 位置
-            // const { window, ...rest } = settings.electron;
-            // store.store = { ...store.store, ...rest };
-            // 目前策略：完全覆盖，除了 window 位置如果超出屏幕可能需要处理（electron-store 通常处理得还行）
-            store.store = settings.electron;
+            // 过滤 window
+            const { ...rest } = settings.electron;
+            store.store = { ...store.store, ...rest };
           } catch (e) {
             console.error("Error restoring electron store:", e);
           }
@@ -123,7 +119,6 @@ const initStoreIpc = (): void => {
           // 兼容旧版纯 Electron Store 导出
           store.store = settings;
         }
-
         return { success: true, data: settings };
       }
       console.log("[IPC] Import cancelled");

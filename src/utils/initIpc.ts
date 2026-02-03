@@ -1,6 +1,6 @@
 import { usePlayerController } from "@/core/player/PlayerController";
 import * as playerIpc from "@/core/player/PlayerIpc";
-import { useDataStore, useMusicStore, useStatusStore } from "@/stores";
+import { useDataStore, useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import type { SettingType } from "@/types/main";
 import { handleProtocolUrl } from "@/utils/protocol";
 import { cloneDeep } from "lodash-es";
@@ -8,6 +8,7 @@ import { toRaw } from "vue";
 import { toLikeSong } from "./auth";
 import { isElectron } from "./env";
 import { getPlayerInfoObj } from "./format";
+import { createConsoleBuffer } from "./log";
 import { openSetting, openUpdateApp } from "./modal";
 
 // 关闭更新状态
@@ -20,6 +21,19 @@ const closeUpdateStatus = () => {
 const initIpc = () => {
   try {
     if (!isElectron) return;
+
+    const consoleBuffer = createConsoleBuffer({
+      bufferKey: "__splayerGlobalConsoleBuffer",
+    });
+    consoleBuffer.init();
+
+    window.addEventListener("error", (event) => {
+      consoleBuffer.push("error", [consoleBuffer.formatErrorEventMessage(event)]);
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      consoleBuffer.push("error", [consoleBuffer.formatErrorEventMessage(event)]);
+    });
+
     const player = usePlayerController();
     // 播放
     window.electron.ipcRenderer.on("play", () => player.play());
@@ -58,6 +72,7 @@ const initIpc = () => {
     window.electron.ipcRenderer.on("taskbar:request-data", () => {
       const musicStore = useMusicStore();
       const statusStore = useStatusStore();
+      const settingStore = useSettingStore();
       const { name, artist } = getPlayerInfoObj() || {};
       const cover = musicStore.playSong?.cover || "";
 
@@ -70,14 +85,31 @@ const initIpc = () => {
         isPlaying: statusStore.playStatus,
       });
 
-      const lyricData = musicStore.songLyric;
-      if (lyricData.lrcData?.length || lyricData.yrcData?.length) {
-        const taskbarLyrics = lyricData.yrcData.length > 0 ? lyricData.yrcData : lyricData.lrcData;
-        playerIpc.sendTaskbarLyrics({
-          lines: toRaw(taskbarLyrics),
-          type: lyricData.yrcData.length > 0 ? "word" : "line",
-        });
-      }
+      // 发送歌词数据
+      playerIpc.sendTaskbarLyrics(musicStore.songLyric);
+
+      // 发送设置
+      window.electron.ipcRenderer.send(
+        "taskbar:set-show-cover",
+        settingStore.taskbarLyricShowCover,
+      );
+      window.electron.ipcRenderer.send("taskbar:set-max-width", settingStore.taskbarLyricMaxWidth);
+      window.electron.ipcRenderer.send("taskbar:set-position", settingStore.taskbarLyricPosition);
+      window.electron.ipcRenderer.send(
+        "taskbar:set-show-when-paused",
+        settingStore.taskbarLyricShowWhenPaused,
+      );
+      window.electron.ipcRenderer.send(
+        "taskbar:set-auto-shrink",
+        settingStore.taskbarLyricAutoShrink,
+      );
+      window.electron.ipcRenderer.send("taskbar:broadcast-settings", {
+        animationMode: settingStore.taskbarLyricAnimationMode,
+        singleLineMode: settingStore.taskbarLyricSingleLineMode,
+        lyricFont: settingStore.LyricFont,
+        globalFont: settingStore.globalFont,
+        fontWeight: settingStore.taskbarLyricFontWeight,
+      });
 
       playerIpc.sendTaskbarProgressData({
         currentTime: statusStore.currentTime * 1000,
@@ -85,6 +117,7 @@ const initIpc = () => {
         offset: statusStore.getSongOffset(musicStore.playSong?.id),
       });
     });
+
     // 请求歌词数据
     window.electron.ipcRenderer.on("request-desktop-lyric-data", () => {
       const musicStore = useMusicStore();
@@ -157,6 +190,9 @@ const initIpc = () => {
           ...songLyric,
         }),
       );
+    });
+    window.electron.ipcRenderer.on("request-renderer-console-logs", () => {
+      window.electron.ipcRenderer.send("return-renderer-console-logs", consoleBuffer.getLogs());
     });
   } catch (error) {
     console.log(error);
