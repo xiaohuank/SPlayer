@@ -1,47 +1,21 @@
-use tracing::{
-    debug,
-    error,
-};
+use tracing::{debug, error};
 use windows::{
     Win32::{
-        Foundation::{
-            HWND,
-            RECT,
-        },
+        Foundation::{HWND, RECT},
         UI::WindowsAndMessaging::{
-            FindWindowExW,
-            GWL_EXSTYLE,
-            GWL_STYLE,
-            GetWindowRect,
-            SetParent,
-            WINDOW_EX_STYLE,
-            WINDOW_STYLE,
-            WS_CAPTION,
-            WS_EX_LAYERED,
-            WS_EX_TOOLWINDOW,
-            WS_MAXIMIZEBOX,
-            WS_MINIMIZEBOX,
-            WS_SYSMENU,
-            WS_THICKFRAME,
+            FindWindowExW, GWL_EXSTYLE, GWL_STYLE, GetWindowRect, SetParent, WINDOW_EX_STYLE,
+            WINDOW_STYLE, WS_CAPTION, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX,
+            WS_MINIMIZEBOX, WS_SYSMENU, WS_THICKFRAME,
         },
     },
     core::w,
 };
 
 use crate::{
-    LayoutParams,
-    TaskbarStrategy,
-    strategy::{
-        Rect,
-        TaskbarLayout,
-        Win11Layout,
-    },
+    LayoutParams, TaskbarStrategy,
+    strategy::{Rect, TaskbarLayout, Win11Layout},
     uia::TaskbarScanner,
-    utils::{
-        check_registry_value,
-        find_taskbar_hwnd,
-        modify_window_long,
-    },
+    utils::{BRIDGE_CLASS, check_registry_value, find_taskbar_hwnd, modify_window_long},
 };
 
 pub struct Win11Strategy {
@@ -64,13 +38,22 @@ impl Win11Strategy {
 
 impl TaskbarStrategy for Win11Strategy {
     fn init(&mut self) -> bool {
-        if let Some(hwnd) = find_taskbar_hwnd() {
-            self.h_taskbar = hwnd;
-            debug!(?hwnd, "找到 Shell_TrayWnd");
-            return true;
+        let Some(hwnd) = find_taskbar_hwnd() else {
+            error!("初始化失败，找不到 Shell_TrayWnd");
+            return false;
+        };
+
+        let h_bridge =
+            unsafe { FindWindowExW(Some(hwnd), None, BRIDGE_CLASS, None) }.unwrap_or_default();
+
+        if h_bridge.0.is_null() {
+            error!("初始化失败，找不到 XAML 桥");
+            return false;
         }
-        error!("初始化失败，找不到 Shell_TrayWnd");
-        false
+
+        self.h_taskbar = hwnd;
+        debug!(?hwnd, "Win11 策略初始化成功");
+        true
     }
 
     fn embed_window(&self, child_wnd: HWND) -> bool {

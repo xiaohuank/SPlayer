@@ -6,10 +6,7 @@
 
 use napi::{
     Result,
-    bindgen_prelude::{
-        Function,
-        Unknown,
-    },
+    bindgen_prelude::{Function, Unknown},
     threadsafe_function::UnknownReturnValue,
 };
 use napi_derive::napi;
@@ -17,18 +14,11 @@ use napi_derive::napi;
 mod discord;
 mod logger;
 mod model;
-/// 扫描器模块
-pub mod scanner;
 mod sys_media;
 
 use model::{
-    DiscordConfigPayload,
-    MetadataParam,
-    MetadataPayload,
-    PlayModePayload,
-    PlayStatePayload,
-    SystemMediaEvent,
-    TimelinePayload,
+    DiscordConfigPayload, MetadataParam, MetadataPayload, PlayModePayload, PlayStatePayload,
+    SystemMediaEvent, TimelinePayload,
 };
 
 /// 初始化插件

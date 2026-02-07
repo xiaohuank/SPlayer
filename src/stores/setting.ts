@@ -64,6 +64,8 @@ export interface SettingState {
   useOnlineService: boolean;
   /** 启动时检查更新 */
   checkUpdateOnStart: boolean;
+  /** 更新通道 */
+  updateChannel: "stable" | "nightly";
   /** 隐藏 VIP 标签 */
   hideVipTag: boolean;
   /** 歌词字体大小 */
@@ -84,6 +86,8 @@ export interface SettingState {
   swapTranRoma: boolean;
   /** 显示逐字音译 */
   showWordsRoma: boolean;
+  /** 歌词动画 */
+  lyricTransition: "slide" | "fade";
   /** 歌词位置 */
   lyricsPosition: "flex-start" | "center" | "flex-end";
   /** 歌词滚动位置偏移量 */
@@ -102,6 +106,8 @@ export interface SettingState {
   customBracketReplacement: string;
   /** 下载路径 */
   downloadPath: string;
+  /** 下载线程数 */
+  downloadThreadCount: number;
   /** 是否启用缓存 */
   cacheEnabled: boolean;
   /** 是否缓存歌曲（音频文件） */
@@ -134,6 +140,8 @@ export interface SettingState {
   downloadLyricToTraditional: boolean;
   /** 下载歌词文件编码 */
   downloadLyricEncoding: "utf-8" | "gbk" | "utf-16" | "iso-8859-1";
+  /** 启用HTTP2下载 */
+  enableDownloadHttp2: boolean;
   /** 默认下载音质（弹窗默认选项） */
   downloadSongLevel: SongLevelType;
   /** 代理协议 */
@@ -269,6 +277,8 @@ export interface SettingState {
     artistDetail: boolean;
     /** 播客电台 */
     radio: boolean;
+    /** 专辑 */
+    album: boolean;
     /** 我的收藏 */
     like: boolean;
     /** 视频 */
@@ -396,6 +406,8 @@ export interface SettingState {
     wiki: boolean;
     search: boolean;
     download: boolean;
+    copyName: boolean;
+    musicTagEditor: boolean;
   };
   /** 启用搜索关键词获取 */
   enableSearchKeyword: boolean;
@@ -495,6 +507,7 @@ export const useSettingStore = defineStore("setting", {
     taskbarLyricSingleLineMode: false,
     taskbarLyricFontWeight: 400,
     checkUpdateOnStart: true,
+    updateChannel: "stable",
     preventSleep: false,
     useKeepAlive: true,
     songLevel: "exhigh",
@@ -552,6 +565,7 @@ export const useSettingStore = defineStore("setting", {
     showRoma: true,
     swapTranRoma: false,
     showWordsRoma: true,
+    lyricTransition: "slide",
     lyricsPosition: "flex-start",
     lyricsBlur: false,
     lyricsScrollOffset: 0.25,
@@ -586,6 +600,7 @@ export const useSettingStore = defineStore("setting", {
       personalFM: false,
       artistDetail: false,
       radio: false,
+      album: false,
       like: false,
       video: false,
       videoDetail: false,
@@ -593,6 +608,7 @@ export const useSettingStore = defineStore("setting", {
     hideAllCovers: false,
     hideMiniPlayerCover: false,
     downloadPath: "",
+    downloadThreadCount: 8,
     cacheEnabled: true,
     songCacheEnabled: true,
     fileNameFormat: "title-artist",
@@ -608,6 +624,7 @@ export const useSettingStore = defineStore("setting", {
     downloadSaveAsAss: false,
     downloadLyricToTraditional: false,
     downloadLyricEncoding: "utf-8",
+    enableDownloadHttp2: true,
     saveMetaFile: false,
     downloadSongLevel: "h",
     proxyProtocol: "off",
@@ -671,6 +688,8 @@ export const useSettingStore = defineStore("setting", {
       wiki: true,
       search: true,
       download: true,
+      copyName: true,
+      musicTagEditor: true,
     },
     enableSearchKeyword: true,
     clearSearchOnBlur: false,

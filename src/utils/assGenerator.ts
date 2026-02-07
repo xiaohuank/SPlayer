@@ -6,7 +6,7 @@ import { type LyricLine } from "@applemusic-like-lyrics/lyric";
 const formatTime = (ms: number): string => {
   const totalSeconds = Math.floor(ms / 1000);
   const centiseconds = Math.floor((ms % 1000) / 10); // ASS uses centiseconds (0-99)
-  
+
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
@@ -18,12 +18,18 @@ const formatTime = (ms: number): string => {
  * 生成 ASS 字幕内容
  * @param lines 歌词行数组
  * @param metadata 元数据（标题、艺术家等）
+ * @param options 选项（是否包含翻译、罗马音）
  */
 export const generateASS = (
   lines: LyricLine[],
-  metadata: { title?: string; artist?: string } = {}
+  metadata: { title?: string; artist?: string } = {},
+  options: {
+    tlyric?: boolean;
+    romalrc?: boolean;
+  } = {},
 ): string => {
   const { title = "Unknown Title", artist = "Unknown Artist" } = metadata;
+  const { tlyric = true, romalrc = false } = options;
 
   const header = `[Script Info]
 Title: ${title} - ${artist}
@@ -42,23 +48,34 @@ Style: Default,Arial,60,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
+  const escapeText = (str: string) => str.replace(/\r?\n/g, "\\N");
+
   const events = lines
     .map((line) => {
       // 忽略空行
-      const text = line.words.map((w) => w.word).join("").trim();
+      const text = line.words
+        .map((w) => w.word)
+        .join("")
+        .trim();
       if (!text) return null;
 
       const startTime = formatTime(line.startTime);
       const endTime = formatTime(line.endTime);
 
+      const dialogueParts: string[] = [escapeText(text)];
+
       // 处理翻译
-      let dialogueText = text;
-      if (line.translatedLyric) {
-          dialogueText += `\\N${line.translatedLyric}`;
+      if (tlyric && line.translatedLyric) {
+        dialogueParts.push(escapeText(line.translatedLyric));
       }
-      
-      // 如果有罗马音，也可以加上，但 ASS 通常不宜过分拥挤，暂只加翻译
-      
+
+      // 处理音译
+      if (romalrc && line.romanLyric) {
+        dialogueParts.push(escapeText(line.romanLyric));
+      }
+
+      const dialogueText = dialogueParts.join("\\N");
+
       return `Dialogue: 0,${startTime},${endTime},Default,,0,0,0,,${dialogueText}`;
     })
     .filter(Boolean)
