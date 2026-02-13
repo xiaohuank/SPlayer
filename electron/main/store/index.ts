@@ -73,6 +73,16 @@ export interface StoreType {
   downloadThreadCount?: number;
   /** 启用HTTP2下载 */
   enableDownloadHttp2?: boolean;
+  /** macOS 专属设置 */
+  macos: {
+    /** 状态栏歌词 */
+    statusBarLyric: {
+      /** 是否启用 */
+      enabled: boolean;
+    };
+  };
+  /** 更新通道 */
+  updateChannel?: "stable" | "nightly";
 }
 
 /**
@@ -104,6 +114,11 @@ export const useStore = () => {
         showWhenPaused: true,
         autoShrink: false,
       },
+      macos: {
+        statusBarLyric: {
+          enabled: false,
+        },
+      },
       proxy: "",
       amllDbServer: defaultAMLLDbServer,
       cachePath: join(app.getPath("userData"), "DataCache"),
@@ -115,6 +130,7 @@ export const useStore = () => {
       },
       downloadThreadCount: 8,
       enableDownloadHttp2: true,
+      updateChannel: "stable",
     },
   });
 };

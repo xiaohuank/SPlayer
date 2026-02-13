@@ -58,16 +58,18 @@ export interface SettingState {
   taskbarLyricAnimationMode: "slide-blur" | "left-sm";
   /** 任务栏歌词单行模式 */
   taskbarLyricSingleLineMode: boolean;
+  /** 任务栏歌词跟随主题色 */
+  taskbarLyricUseThemeColor: boolean;
   /** 任务栏歌词字重 */
   taskbarLyricFontWeight: number;
   /** 是否使用在线服务 */
   useOnlineService: boolean;
   /** 启动时检查更新 */
   checkUpdateOnStart: boolean;
-  /** 更新通道 */
-  updateChannel: "stable" | "nightly";
   /** 隐藏 VIP 标签 */
   hideVipTag: boolean;
+  /** 歌词字体大小模式 */
+  lyricFontSizeMode: "fixed" | "adaptive";
   /** 歌词字体大小 */
   lyricFontSize: number;
   /** 歌词翻译字体大小 */
@@ -469,6 +471,14 @@ export interface SettingState {
   disableDjMode: boolean;
   /** 启用全局错误弹窗 */
   enableGlobalErrorDialog: boolean;
+  /** macOS 专属设置 */
+  macos: {
+    /** 状态栏歌词 */
+    statusBarLyric: {
+      /** 是否启用 */
+      enabled: boolean;
+    };
+  };
 }
 
 export const useSettingStore = defineStore("setting", {
@@ -505,9 +515,9 @@ export const useSettingStore = defineStore("setting", {
     taskbarLyricShowWhenPaused: true,
     taskbarLyricAnimationMode: "slide-blur",
     taskbarLyricSingleLineMode: false,
+    taskbarLyricUseThemeColor: false,
     taskbarLyricFontWeight: 400,
     checkUpdateOnStart: true,
-    updateChannel: "stable",
     preventSleep: false,
     useKeepAlive: true,
     songLevel: "exhigh",
@@ -546,6 +556,7 @@ export const useSettingStore = defineStore("setting", {
     playSongDemo: false,
     scrobbleSong: false,
     dynamicCover: false,
+    lyricFontSizeMode: "adaptive",
     lyricFontSize: 46,
     lyricTranFontSize: 22,
     lyricRomaFontSize: 18,
@@ -731,6 +742,11 @@ export const useSettingStore = defineStore("setting", {
     disableAiAudio: false,
     disableDjMode: false,
     enableGlobalErrorDialog: true,
+    macos: {
+      statusBarLyric: {
+        enabled: false,
+      },
+    },
   }),
   getters: {
     /**
