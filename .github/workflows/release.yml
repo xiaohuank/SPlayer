@@ -8,7 +8,6 @@ on:
 
 env:
   NODE_VERSION: 22.x
-  # SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_TOKEN }}
 
 jobs:
   # ===================================================================
@@ -121,6 +120,7 @@ jobs:
         run: pnpm build:mac
         shell: bash
         env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build Linux x64 & ARM64 App
         if: runner.os == 'Linux'
@@ -128,11 +128,6 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # 上传 Snap 包到 Snapcraft 商店
-      # - name: Publish Snap to Snap Store
-      #   if: runner.os == 'Linux'
-      #   run: snapcraft upload dist/*.snap --release stable
-      #   continue-on-error: true
       # 合并所有构建
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -141,17 +136,86 @@ jobs:
           path: dist/*.*
 
   # ===================================================================
-  # 收集并发布 Release
+  #  Generate Changelog & Release
   # ===================================================================
   release:
     name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
-    # 需要写入权限
     permissions:
       contents: write
+      pull-requests: write
     steps:
-      # 将所有产物下载到 artifacts 文件夹
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Changelog
+        id: changelog
+        shell: bash
+        run: |
+          # 获取前一个 tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+
+          echo "Previous tag: $PREV_TAG"
+          echo "Current tag: $CURRENT_TAG"
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found. Generating log from start."
+            git log --pretty=format:"- %s (%h)" > changelog_content.md
+          else
+            echo "Generating log from $PREV_TAG to $CURRENT_TAG"
+            git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" > changelog_content.md
+          fi
+
+          # 翻译提交类型 (Conventional Commits)
+          sed -i -E 's/^- feat(\(.*\))?:/- ✨ 新增:/g' changelog_content.md
+          sed -i -E 's/^- fix(\(.*\))?:/- 🐞 修复:/g' changelog_content.md
+          sed -i -E 's/^- docs(\(.*\))?:/- 📝 文档:/g' changelog_content.md
+          sed -i -E 's/^- style(\(.*\))?:/- 💄 样式:/g' changelog_content.md
+          sed -i -E 's/^- refactor(\(.*\))?:/- ♻️ 重构:/g' changelog_content.md
+          sed -i -E 's/^- perf(\(.*\))?:/- ⚡️ 性能:/g' changelog_content.md
+          sed -i -E 's/^- test(\(.*\))?:/- ✅ 测试:/g' changelog_content.md
+          sed -i -E 's/^- build(\(.*\))?:/- 📦 构建:/g' changelog_content.md
+          sed -i -E 's/^- ci(\(.*\))?:/- 👷 CI:/g' changelog_content.md
+          sed -i -E 's/^- chore(\(.*\))?:/- 🔧 维护:/g' changelog_content.md
+          sed -i -E 's/^- revert(\(.*\))?:/- ⏪️ 回退:/g' changelog_content.md
+
+          # 1. 生成 CHANGELOG.md 的新条目
+          # 添加标题和日期
+          DATE=$(date +%Y-%m-%d)
+          echo -e "\n## [$CURRENT_TAG] - $DATE\n" > temp_header.md
+          cat temp_header.md changelog_content.md > new_entry.md
+
+          # 更新 CHANGELOG.md
+          if [ ! -f CHANGELOG.md ]; then
+            echo "# 更新日志" > CHANGELOG.md
+          fi
+
+          # 将新内容插入到 CHANGELOG.md 的第二行（标题之后）
+          head -n 1 CHANGELOG.md > temp_changelog.md
+          echo "" >> temp_changelog.md
+          cat new_entry.md >> temp_changelog.md
+          echo "" >> temp_changelog.md
+          tail -n +2 CHANGELOG.md >> temp_changelog.md
+          mv temp_changelog.md CHANGELOG.md
+
+          # 2. 生成 Release Body (release_notes.md)
+          cat changelog_content.md > release_notes.md
+
+          # 输出生成的日志内容供 Release 使用
+          cat release_notes.md
+
+      - name: Commit & Push Changelog
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add CHANGELOG.md
+          git commit -m "docs: 更新变更日志 $GITHUB_REF_NAME [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:main || echo "Failed to push to main. This might happen if tag is not on main."
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -162,9 +226,8 @@ jobs:
         continue-on-error: true
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          # 自动生成 Release 说明
-          # generate_release_notes: true
-          # 发布为草稿
+          body_path: release_notes.md
+          generate_release_notes: true
           draft: false
           # 发布为预发布
           prerelease: false

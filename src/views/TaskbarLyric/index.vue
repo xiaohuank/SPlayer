@@ -78,7 +78,6 @@ import {
   type TaskbarConfig,
 } from "@/types/shared";
 import type { LyricLine } from "@applemusic-like-lyrics/lyric";
-import type { StoreState } from "pinia";
 import type { CSSProperties } from "vue";
 import LyricScroll from "./LyricScroll.vue";
 
@@ -447,8 +446,7 @@ const configMap: Partial<Record<keyof TaskbarConfig, keyof typeof settingStore>>
 };
 
 const applyConfigToStore = (config: Partial<TaskbarConfig>) => {
-  type SettingState = StoreState<typeof settingStore>;
-  const patches: Partial<SettingState> = {};
+  const patches: Record<string, unknown> = {};
 
   (Object.keys(config) as Array<keyof TaskbarConfig>).forEach((key) => {
     const storeKey = configMap[key];
@@ -702,6 +700,7 @@ $radius: 4px;
   align-items: center;
   justify-content: center;
   height: 100%;
+  max-width: 120px;
   gap: 6px;
   overflow: hidden;
   z-index: 10;
