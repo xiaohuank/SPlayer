@@ -3,11 +3,18 @@ import type { LyricLine } from "@applemusic-like-lyrics/lyric";
 export type Milliseconds = number;
 
 export interface TaskbarConfig {
+  mode: "taskbar" | "floating";
   maxWidth: number;
   position: "automatic" | "left" | "right";
   autoShrink: boolean;
   margin: number;
   minWidth: number;
+
+  floatingAlign: "left" | "right";
+  floatingAutoWidth: boolean;
+  floatingWidth: number;
+  floatingHeight: number;
+  floatingAlwaysOnTop: boolean;
 
   enabled: boolean;
   showWhenPaused: boolean;
@@ -19,6 +26,7 @@ export interface TaskbarConfig {
   fontWeight: number;
   animationMode: "slide-blur" | "left-sm";
   singleLineMode: boolean;
+  showWordLyrics: boolean;
   showTranslation: boolean;
   showRomaji: boolean;
 }
@@ -50,40 +58,40 @@ export type SyncTickPayload = [Milliseconds, Milliseconds, Milliseconds];
 
 export type SyncStatePayload =
   | {
-    type: "full-hydration";
-    data: {
-      track: TrackData;
-      playback: PlaybackState & { tick: SyncTickPayload };
-      lyrics: LyricData;
-      config: TaskbarConfig;
-      lyricLoading: boolean;
-      themeColor: ThemeColorData | null;
+      type: "full-hydration";
+      data: {
+        track: TrackData;
+        playback: PlaybackState & { tick: SyncTickPayload };
+        lyrics: LyricData;
+        config: TaskbarConfig;
+        lyricLoading: boolean;
+        themeColor: ThemeColorData | null;
+      };
+    }
+  | {
+      type: "track-change";
+      data: TrackData;
+    }
+  | {
+      type: "playback-state";
+      data: PlaybackState;
+    }
+  | {
+      type: "lyrics-loaded";
+      data: LyricData;
+    }
+  | {
+      type: "config-update";
+      data: Partial<TaskbarConfig>;
+    }
+  | {
+      type: "theme-color";
+      data: ThemeColorData | null;
+    }
+  | {
+      type: "system-theme";
+      data: { isDark: boolean };
     };
-  }
-  | {
-    type: "track-change";
-    data: TrackData;
-  }
-  | {
-    type: "playback-state";
-    data: PlaybackState;
-  }
-  | {
-    type: "lyrics-loaded";
-    data: LyricData;
-  }
-  | {
-    type: "config-update";
-    data: Partial<TaskbarConfig>;
-  }
-  | {
-    type: "theme-color";
-    data: ThemeColorData | null;
-  }
-  | {
-    type: "system-theme";
-    data: { isDark: boolean };
-  };
 
 /**
  * 适用于任务栏歌词的 IPC 通道相关常量

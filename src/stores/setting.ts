@@ -44,6 +44,8 @@ export interface SettingState {
   closeAppMethod: "exit" | "hide";
   /** 显示任务栏进度 */
   showTaskbarProgress: boolean;
+  /** 任务栏歌词模式 */
+  taskbarLyricMode: "taskbar" | "floating";
   /** 任务栏歌词显示封面 */
   taskbarLyricShowCover: boolean;
   /** 任务栏歌词最大宽度 */
@@ -56,18 +58,32 @@ export interface SettingState {
   taskbarLyricMargin: number;
   /** 任务栏歌词最小宽度 */
   taskbarLyricMinWidth: number;
+  /** 任务栏歌词悬浮对齐 **/
+  taskbarLyricFloatingAlign: "left" | "right";
+  /** 任务栏歌词悬浮自动宽度 **/
+  taskbarLyricFloatingAutoWidth: boolean;
+  /** 任务栏歌词悬浮宽度 **/
+  taskbarLyricFloatingWidth: number;
+  /** 任务栏歌词悬浮高度 **/
+  taskbarLyricFloatingHeight: number;
+  /** 任务栏歌词悬浮置顶 **/
+  taskbarLyricFloatingAlwaysOnTop: boolean;
   /** 暂停时显示任务栏歌词 */
   taskbarLyricShowWhenPaused: boolean;
   /** 任务栏歌词动画模式 */
   taskbarLyricAnimationMode: "slide-blur" | "left-sm";
   /** 任务栏歌词单行模式 */
   taskbarLyricSingleLineMode: boolean;
+  /** 任务栏歌词逐字模式 */
+  taskbarLyricShowWordLyrics: boolean;
   /** 任务栏歌词跟随主题色 */
   taskbarLyricUseThemeColor: boolean;
   /** 任务栏歌词字重 */
   taskbarLyricFontWeight: number;
   /** 是否使用在线服务 */
   useOnlineService: boolean;
+  /** 分享链接格式 */
+  shareUrlFormat: "web" | "mobile";
   /** 启动时检查更新 */
   checkUpdateOnStart: boolean;
   /** 隐藏 VIP 标签 */
@@ -83,7 +99,7 @@ export interface SettingState {
   /** 歌词字重设置 */
   lyricFontWeight: number;
   /** 显示逐字歌词 */
-  showYrc: boolean;
+  showWordLyrics: boolean;
   /** 显示歌词翻译 */
   showTran: boolean;
   /** 显示歌词音译 */
@@ -106,6 +122,8 @@ export interface SettingState {
   hideBracketedContent: boolean;
   /** 替换歌词括号内容 */
   replaceLyricBrackets: boolean;
+  /** 把歌词里的屏蔽词还原为原词 **/
+  uncensorMaskedProfanity: boolean;
   /** 歌词括号替换预设 */
   bracketReplacementPreset: "dash" | "angleBrackets" | "cornerBrackets" | "custom";
   /** 自定义歌词括号替换内容 */
@@ -158,14 +176,14 @@ export interface SettingState {
   proxyPort: number;
   /** 歌曲音质 */
   songLevel:
-  | "standard"
-  | "higher"
-  | "exhigh"
-  | "lossless"
-  | "hires"
-  | "jyeffect"
-  | "sky"
-  | "jymaster";
+    | "standard"
+    | "higher"
+    | "exhigh"
+    | "lossless"
+    | "hires"
+    | "jyeffect"
+    | "sky"
+    | "jymaster";
   /** 播放设备 */
   playDevice: "default" | string;
   /** 音频引擎: element (原生) 或 ffmpeg */
@@ -216,12 +234,16 @@ export interface SettingState {
   progressAdjustLyric: boolean;
   /** 显示播放列表数量 */
   showPlaylistCount: boolean;
+  /** 显示评论数量 */
+  showCommentCount: "off" | "compact" | "full";
   /** 是否显示音乐频谱 */
   showSpectrums: boolean;
   /** 是否开启系统音频集成 */
   smtcOpen: boolean;
   /** 歌词模糊 */
   lyricsBlur: boolean;
+  /** 歌词混合模式 */
+  lyricsBlendMode: "screen" | "plus-lighter";
   /** 播放试听 */
   playSongDemo: boolean;
   /** 显示搜索历史 */
@@ -473,6 +495,10 @@ export interface SettingState {
   disableAiAudio: boolean;
   /** Fuck DJ: 开启后自动跳过 DJ 歌曲 */
   disableDjMode: boolean;
+  /** 启用自动混音 */
+  enableAutomix: boolean;
+  /** 自动混音最大分析时间 (秒) */
+  automixMaxAnalyzeTime: number;
   /** 启用全局错误弹窗 */
   enableGlobalErrorDialog: boolean;
   /** macOS 专属设置 */
@@ -509,18 +535,26 @@ export const useSettingStore = defineStore("setting", {
     routeAnimation: "slide",
     playerExpandAnimation: "up",
     useOnlineService: true,
+    shareUrlFormat: "web",
     showCloseAppTip: true,
     closeAppMethod: "hide",
     showTaskbarProgress: false,
+    taskbarLyricMode: "taskbar",
     taskbarLyricShowCover: true,
     taskbarLyricMaxWidth: 30,
     taskbarLyricPosition: "automatic",
     taskbarLyricAutoShrink: false,
     taskbarLyricMargin: 10,
     taskbarLyricMinWidth: 10,
+    taskbarLyricFloatingAlign: "right",
+    taskbarLyricFloatingAutoWidth: true,
+    taskbarLyricFloatingWidth: 300,
+    taskbarLyricFloatingHeight: 48,
+    taskbarLyricFloatingAlwaysOnTop: false,
     taskbarLyricShowWhenPaused: true,
     taskbarLyricAnimationMode: "slide-blur",
     taskbarLyricSingleLineMode: false,
+    taskbarLyricShowWordLyrics: true,
     taskbarLyricUseThemeColor: false,
     taskbarLyricFontWeight: 400,
     checkUpdateOnStart: true,
@@ -557,6 +591,7 @@ export const useSettingStore = defineStore("setting", {
     progressTooltipShow: true,
     progressAdjustLyric: false,
     showPlaylistCount: true,
+    showCommentCount: "compact",
     showSpectrums: false,
     smtcOpen: true,
     playSongDemo: false,
@@ -577,7 +612,7 @@ export const useSettingStore = defineStore("setting", {
     lyricPriority: "auto",
     localLyricQQMusicMatch: false,
     amllDbServer: defaultAMLLDbServer,
-    showYrc: true,
+    showWordLyrics: true,
     showTran: true,
     showRoma: true,
     swapTranRoma: false,
@@ -585,11 +620,13 @@ export const useSettingStore = defineStore("setting", {
     lyricTransition: "slide",
     lyricsPosition: "flex-start",
     lyricsBlur: false,
+    lyricsBlendMode: "screen",
     lyricsScrollOffset: 0.25,
     lyricHorizontalOffset: 10,
     lyricAlignRight: false,
     hideBracketedContent: false,
     replaceLyricBrackets: false,
+    uncensorMaskedProfanity: false,
     bracketReplacementPreset: "dash",
     customBracketReplacement: "-",
     enableExcludeLyrics: true,
@@ -747,6 +784,8 @@ export const useSettingStore = defineStore("setting", {
     streamingEnabled: false,
     disableAiAudio: false,
     disableDjMode: false,
+    enableAutomix: false,
+    automixMaxAnalyzeTime: 60,
     enableGlobalErrorDialog: true,
     macos: {
       statusBarLyric: {
@@ -816,11 +855,12 @@ export const useSettingStore = defineStore("setting", {
       }
       window.$message.info(
         `已切换至
-        ${this.themeMode === "auto"
-          ? "跟随系统"
-          : this.themeMode === "light"
-            ? "浅色模式"
-            : "深色模式"
+        ${
+          this.themeMode === "auto"
+            ? "跟随系统"
+            : this.themeMode === "light"
+              ? "浅色模式"
+              : "深色模式"
         }`,
         {
           showIcon: false,
