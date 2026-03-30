@@ -44,42 +44,8 @@ export interface SettingState {
   closeAppMethod: "exit" | "hide";
   /** 显示任务栏进度 */
   showTaskbarProgress: boolean;
-  /** 任务栏歌词模式 */
-  taskbarLyricMode: "taskbar" | "floating";
-  /** 任务栏歌词显示封面 */
-  taskbarLyricShowCover: boolean;
-  /** 任务栏歌词最大宽度 */
-  taskbarLyricMaxWidth: number;
-  /** 任务栏歌词位置 */
-  taskbarLyricPosition: "automatic" | "left" | "right";
-  /** 任务栏歌词自动收缩 */
-  taskbarLyricAutoShrink: boolean;
-  /** 任务栏歌词边距 */
-  taskbarLyricMargin: number;
-  /** 任务栏歌词最小宽度 */
-  taskbarLyricMinWidth: number;
-  /** 任务栏歌词悬浮对齐 **/
-  taskbarLyricFloatingAlign: "left" | "right";
-  /** 任务栏歌词悬浮自动宽度 **/
-  taskbarLyricFloatingAutoWidth: boolean;
-  /** 任务栏歌词悬浮宽度 **/
-  taskbarLyricFloatingWidth: number;
-  /** 任务栏歌词悬浮高度 **/
-  taskbarLyricFloatingHeight: number;
-  /** 任务栏歌词悬浮置顶 **/
-  taskbarLyricFloatingAlwaysOnTop: boolean;
-  /** 暂停时显示任务栏歌词 */
-  taskbarLyricShowWhenPaused: boolean;
-  /** 任务栏歌词动画模式 */
-  taskbarLyricAnimationMode: "slide-blur" | "left-sm";
-  /** 任务栏歌词单行模式 */
-  taskbarLyricSingleLineMode: boolean;
-  /** 任务栏歌词逐字模式 */
-  taskbarLyricShowWordLyrics: boolean;
   /** 任务栏歌词跟随主题色 */
   taskbarLyricUseThemeColor: boolean;
-  /** 任务栏歌词字重 */
-  taskbarLyricFontWeight: number;
   /** 是否使用在线服务 */
   useOnlineService: boolean;
   /** 分享链接格式 */
@@ -188,6 +154,8 @@ export interface SettingState {
   playDevice: "default" | string;
   /** 音频引擎: element (原生) 或 ffmpeg */
   audioEngine: "element" | "ffmpeg";
+  /** Web Audio 延迟策略 */
+  audioLatencyHint: "interactive" | "playback";
   /** 自动播放 */
   autoPlay: boolean;
   /** 预载下一首 */
@@ -212,6 +180,8 @@ export interface SettingState {
   timeFormat: TimeFormat;
   /** 播放器类型 */
   playerType: "cover" | "record" | "fullscreen";
+  /** 评论显示模式 */
+  commentDisplayMode: "fullscreen" | "left" | "right";
   /** 背景类型 */
   playerBackgroundType: "none" | "animation" | "blur" | "color";
   /** 背景动画帧率 */
@@ -234,8 +204,6 @@ export interface SettingState {
   progressAdjustLyric: boolean;
   /** 显示播放列表数量 */
   showPlaylistCount: boolean;
-  /** 显示评论数量 */
-  showCommentCount: "off" | "compact" | "full";
   /** 是否显示音乐频谱 */
   showSpectrums: boolean;
   /** 是否开启系统音频集成 */
@@ -246,8 +214,6 @@ export interface SettingState {
   lyricsBlendMode: "screen" | "plus-lighter";
   /** 播放试听 */
   playSongDemo: boolean;
-  /** 显示搜索历史 */
-  showSearchHistory: boolean;
   /** 是否使用 AMLL 歌词 */
   useAMLyrics: boolean;
   /** 是否使用 AMLL 歌词弹簧效果 */
@@ -258,6 +224,8 @@ export interface SettingState {
   wordFadeWidth: number;
   /** 歌词时延调节步长（毫秒） */
   lyricOffsetStep: number;
+  /** 音频延迟手动补偿（毫秒） */
+  audioDelayCompensation: number;
   /** 启用在线 TTML 歌词 */
   enableOnlineTTMLLyric: boolean;
   /** 启用 QM 歌词 */
@@ -416,6 +384,7 @@ export interface SettingState {
     copyLyric: boolean;
     lyricOffset: boolean;
     lyricSettings: boolean;
+    commentCount: boolean;
   };
   /** 右键菜单显示配置 */
   contextMenuOptions: {
@@ -439,6 +408,10 @@ export interface SettingState {
   };
   /** 启用搜索关键词获取 */
   enableSearchKeyword: boolean;
+  /** 显示搜索历史 */
+  showSearchHistory: boolean;
+  /** 显示热搜榜 */
+  showHotSearch: boolean;
   /** 搜索框行为 */
   searchInputBehavior: "normal" | "clear" | "sync";
   /** 显示主页问好 */
@@ -529,7 +502,6 @@ export const useSettingStore = defineStore("setting", {
     englishLyricFont: "follow",
     koreanLyricFont: "follow",
     hideVipTag: false,
-    showSearchHistory: true,
     menuShowCover: true,
     menuExpandedKeys: [],
     routeAnimation: "slide",
@@ -539,30 +511,14 @@ export const useSettingStore = defineStore("setting", {
     showCloseAppTip: true,
     closeAppMethod: "hide",
     showTaskbarProgress: false,
-    taskbarLyricMode: "taskbar",
-    taskbarLyricShowCover: true,
-    taskbarLyricMaxWidth: 30,
-    taskbarLyricPosition: "automatic",
-    taskbarLyricAutoShrink: false,
-    taskbarLyricMargin: 10,
-    taskbarLyricMinWidth: 10,
-    taskbarLyricFloatingAlign: "right",
-    taskbarLyricFloatingAutoWidth: true,
-    taskbarLyricFloatingWidth: 300,
-    taskbarLyricFloatingHeight: 48,
-    taskbarLyricFloatingAlwaysOnTop: false,
-    taskbarLyricShowWhenPaused: true,
-    taskbarLyricAnimationMode: "slide-blur",
-    taskbarLyricSingleLineMode: false,
-    taskbarLyricShowWordLyrics: true,
     taskbarLyricUseThemeColor: false,
-    taskbarLyricFontWeight: 400,
     checkUpdateOnStart: true,
     preventSleep: false,
     useKeepAlive: true,
     songLevel: "exhigh",
     playDevice: "default",
     audioEngine: "element",
+    audioLatencyHint: "interactive",
     autoPlay: false,
     useNextPrefetch: true,
     songVolumeFade: true,
@@ -580,6 +536,7 @@ export const useSettingStore = defineStore("setting", {
     barLyricShow: true,
     timeFormat: "current-total",
     playerType: "cover",
+    commentDisplayMode: "fullscreen",
     playerBackgroundType: "blur",
     playerBackgroundFps: 30,
     playerBackgroundFlowSpeed: 4,
@@ -591,7 +548,6 @@ export const useSettingStore = defineStore("setting", {
     progressTooltipShow: true,
     progressAdjustLyric: false,
     showPlaylistCount: true,
-    showCommentCount: "compact",
     showSpectrums: false,
     smtcOpen: true,
     playSongDemo: false,
@@ -607,6 +563,7 @@ export const useSettingStore = defineStore("setting", {
     hidePassedLines: false,
     wordFadeWidth: 0.5,
     lyricOffsetStep: 500,
+    audioDelayCompensation: 0,
     enableOnlineTTMLLyric: false,
     enableQQMusicLyric: false,
     lyricPriority: "auto",
@@ -725,6 +682,7 @@ export const useSettingStore = defineStore("setting", {
       copyLyric: true,
       lyricOffset: true,
       lyricSettings: true,
+      commentCount: false,
     },
     contextMenuOptions: {
       play: true,
@@ -746,6 +704,8 @@ export const useSettingStore = defineStore("setting", {
       musicTagEditor: true,
     },
     enableSearchKeyword: true,
+    showSearchHistory: true,
+    showHotSearch: true,
     searchInputBehavior: "normal",
     showHomeGreeting: true,
     homePageSections: [

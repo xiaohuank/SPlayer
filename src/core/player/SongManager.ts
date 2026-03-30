@@ -12,6 +12,7 @@ import { QualityType, type SongType, type AudioSourceType } from "@/types/main";
 import { isLogin } from "@/utils/auth";
 import { isElectron } from "@/utils/env";
 import { formatSongsList } from "@/utils/format";
+import { toFileUrl } from "@/utils/fileUrl";
 import { AI_AUDIO_LEVELS } from "@/utils/meta";
 import { handleSongQuality } from "@/utils/helper";
 import { openUserLogin } from "@/utils/modal";
@@ -154,7 +155,7 @@ class SongManager {
         );
         if (cachePath) {
           console.log(`🚀 [${id}] 由本地音乐缓存提供`);
-          return `file://${cachePath}`;
+          return toFileUrl(cachePath);
         }
       } catch (e) {
         console.error(`❌ [${id}] 检查缓存失败:`, e);
@@ -184,12 +185,12 @@ class SongManager {
   public getOnlineUrl = async (id: number, isPc: boolean = false): Promise<AudioSource> => {
     const settingStore = useSettingStore();
     let level: string = isPc ? "exhigh" : settingStore.songLevel;
-    
+
     // Fuck AI Mode: 如果开启，且请求的 level 是 AI 音质，降级为 hires
     if (settingStore.disableAiAudio && AI_AUDIO_LEVELS.includes(level)) {
       level = "hires";
     }
-    
+
     // 如果请求杜比音质，先检查歌曲是否支持
     if (level === "dolby") {
       try {
@@ -212,17 +213,17 @@ class SongManager {
         level = "exhigh";
       }
     }
-    
+
     const res = await songUrl(id, level as any);
     console.log(`🌐 ${id} music data:`, res);
-    
+
     // 兼容新旧接口的数据结构
     const songData = Array.isArray(res.data) ? res.data[0] : res.data?.[0];
-    
+
     // 是否有播放地址
     if (!songData || !songData?.url) return { id, url: undefined };
     // 是否仅能试听
-    const isTrial = songData?.freeTrialInfo !== null;
+    const isTrial = songData?.freeTrialInfo != null;
     // 返回歌曲地址
     const normalizedUrl = isElectron
       ? songData.url
@@ -232,7 +233,7 @@ class SongManager {
           .replace(/m704\.music\.126\.net/g, "m701.music.126.net");
     // 若为试听且未开启试听播放，则将 url 置为空，仅标记为试听
     const finalUrl = isTrial && !settingStore.playSongDemo ? null : normalizedUrl;
-    
+
     // 获取音质：如果请求的是杜比，直接使用杜比音质，否则从返回数据判断
     let quality: QualityType | undefined;
     if (level === "dolby") {
@@ -242,7 +243,7 @@ class SongManager {
       // 其他音质从返回数据判断
       quality = handleSongQuality(songData, "online");
     }
-    
+
     // 检查本地缓存
     if (finalUrl && quality) {
       const cachedUrl = await this.checkLocalCache(id, quality, songData?.md5);
@@ -286,8 +287,10 @@ class SongManager {
         };
       }
     }
-    const artist = Array.isArray(song.artists) ? song.artists[0].name : song.artists;
-    const keyWord = song.name + "-" + artist;
+    const artistName = Array.isArray(song.artists)
+      ? song.artists.map((a) => a.name).join(" & ")
+      : song.artists;
+    const keyWord = song.name + "-" + artistName;
     if (!songId || !keyWord) {
       return { id: songId, url: undefined };
     }
@@ -309,11 +312,13 @@ class SongManager {
     // 并发执行
     const results = await Promise.allSettled(
       servers.map((server) =>
-        unlockSongUrl(songId, keyWord, server).then((result) => ({
-          server,
-          result,
-          success: result.code === 200 && !!result.url,
-        })),
+        unlockSongUrl(songId, keyWord, server, song.name, String(artistName || "")).then(
+          (result) => ({
+            server,
+            result,
+            success: result.code === 200 && !!result.url,
+          }),
+        ),
       ),
     );
 
@@ -488,8 +493,8 @@ class SongManager {
         console.error("❌ 本地文件不存在");
         return { id: song.id, url: undefined };
       }
-      const encodedPath = song.path.replace(/#/g, "%23").replace(/\?/g, "%3F");
-      return { id: song.id, url: `file://${encodedPath}`, source: "local" };
+      const fileUrl = toFileUrl(song.path);
+      return { id: song.id, url: fileUrl, source: "local" };
     }
 
     // Stream songs (Subsonic / Jellyfin)
