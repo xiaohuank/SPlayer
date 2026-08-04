@@ -35,19 +35,19 @@
 
 ## 开发环境搭建
 
-请参考 [使用指南](/guide.html#本地开发环境) 完成以下准备工作：
+请参考 [使用指南](/guide.html#🛠-本地开发环境) 完成以下准备工作：
 
 1. 安装 Node.js (v18+)
 2. 安装 pnpm
 3. 安装 Git
 4. 克隆仓库并安装依赖
-5. (可选) 安装 Rust 和 C++ 构建工具
+5. 安装 Rust 和 C++ 构建工具 (可选，若只开发 Web 版则不需要。开发桌面版则必选)
 
 ## Git 工作流
 
 ### 1. Fork 仓库
 
-访问 [SPlayer 仓库](https://github.com/imsyy/SPlayer)，点击右上角 **Fork** 按钮复制仓库到你的账号。
+访问 [SPlayer 仓库](https://github.com/SPlayer-Dev/SPlayer)，点击右上角 **Fork** 按钮复制仓库到你的账号。
 
 ### 2. 克隆你的 Fork
 
@@ -57,15 +57,15 @@ git clone https://github.com/YOUR_USERNAME/SPlayer.git
 cd SPlayer
 
 # 添加上游仓库
-git remote add upstream https://github.com/imsyy/SPlayer.git
+git remote add upstream https://github.com/SPlayer-Dev/SPlayer.git
 
 # 验证远程仓库配置
 git remote -v
 # 应显示:
 # origin    https://github.com/YOUR_USERNAME/SPlayer.git (fetch)
 # origin    https://github.com/YOUR_USERNAME/SPlayer.git (push)
-# upstream  https://github.com/imsyy/SPlayer.git (fetch)
-# upstream  https://github.com/imsyy/SPlayer.git (push)
+# upstream  https://github.com/SPlayer-Dev/SPlayer.git (fetch)
+# upstream  https://github.com/SPlayer-Dev/SPlayer.git (push)
 ```
 
 ### 3. 同步上游更新
@@ -152,14 +152,15 @@ git push origin feature/your-feature-name
 2. 点击 **Compare & pull request** 按钮
 3. 填写 PR 标题和描述：
    - 清晰描述更改内容
-   - 关联相关 Issue（如有）：`Closes #123`
+   - 关联相关 Issue（如有）：`Closes #123`（详细信息可查看 [GitHub 文档](https://docs.github.com/zh/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)）
    - 提供测试方法或截图
 4. 点击 **Create pull request**
 
 ### 8. 代码审查
 
+- AI 会对 PR 进行初步审核（AI 有时会挑刺，只改你觉得有必要的即可）
 - 维护者可能会提出修改建议
-- 根据反馈进行修改并推送更新
+- 根据反馈进行修改并推送更新，你也可以选择说服维护者为什么你是对的
 - PR 合并后，可删除功能分支
 
 ```bash
@@ -184,7 +185,7 @@ pnpm lint
 pnpm format
 ```
 
-提交前请确保代码通过规范检查。
+提交前请确保您的代码通过规范检查。
 
 ### 目录结构
 
@@ -199,9 +200,8 @@ SPlayer/
 ├── electron/               # Electron 主进程
 │   ├── main/               # 主进程代码
 │   └── preload/            # 预加载脚本
-├── native/                 # 原生 Rust 插件
-│   ├── smtc-for-splayer/   # SMTC 模块
-│   └── discord-rpc-for-splayer/  # Discord RPC 模块
+├── native/                 # Node.js 原生插件
+│   ├── external-media-integration/   # 媒体控件集成模块
 ├── docs/                   # 文档
 └── scripts/                # 构建脚本
 ```
@@ -245,8 +245,7 @@ git commit --amend -m "新的提交信息"
 
 如果您在贡献过程中遇到问题：
 
-1. 查阅项目 [Issues](https://github.com/imsyy/SPlayer/issues)
+1. 查阅项目 [Issues](https://github.com/SPlayer-Dev/SPlayer/issues)
 2. 提交新 Issue 描述您的问题
-3. 加入项目讨论群组
 
 感谢您的贡献！🎉
